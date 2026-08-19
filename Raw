@@ -14,9 +14,25 @@ local function setupCustomAnimations(character)
 	local animator = humanoid:WaitForChild("Animator")
 
 	-- Set ninja stats (WalkSpeed 43 and JumpPower 80)
-	humanoid.WalkSpeed = 43
+	local lockedSpeed = 43
+	local lockedJumpPower = 80
+
+	humanoid.WalkSpeed = lockedSpeed
 	humanoid.UseJumpPower = true
-	humanoid.JumpPower = 80
+	humanoid.JumpPower = lockedJumpPower
+
+	-- Ensure speed and jump power stay locked even if a tool or external trigger tries to change them
+	humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
+		if humanoid.WalkSpeed ~= lockedSpeed then
+			humanoid.WalkSpeed = lockedSpeed
+		end
+	end)
+
+	humanoid:GetPropertyChangedSignal("JumpPower"):Connect(function()
+		if humanoid.JumpPower ~= lockedJumpPower then
+			humanoid.JumpPower = lockedJumpPower
+		end
+	end)
 
 	-- Anti-Fling: Disable collisions on character parts/accessories to prevent being flung
 	for _, part in ipairs(character:GetDescendants()) do
