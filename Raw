@@ -1,0 +1,170 @@
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+local ANIMATIONS = {
+	Idle = "rbxassetid://121480327509940",
+	WalkRun = "rbxassetid://118959209918644",
+	Jump = "rbxassetid://656117878",
+	Fall = "rbxassetid://656115606",
+	Climb = "rbxassetid://656114359",
+}
+
+local function setupCustomAnimations(character)
+	local humanoid = character:WaitForChild("Humanoid")
+	local animator = humanoid:WaitForChild("Animator")
+
+	-- Set ninja stats (WalkSpeed 43 and JumpPower 80)
+	humanoid.WalkSpeed = 43
+	humanoid.UseJumpPower = true
+	humanoid.JumpPower = 80
+
+	-- Anti-Fling: Disable collisions on character parts/accessories to prevent being flung
+	for _, part in ipairs(character:GetDescendants()) do
+		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+			part.CanCollide = false
+		end
+	end
+	
+	-- Catch any newly added parts (like hats or tools)
+	character.DescendantAdded:Connect(function(descendant)
+		if descendant:IsA("BasePart") and descendant.Name ~= "HumanoidRootPart" then
+			descendant.CanCollide = false
+		end
+	end)
+
+	-- Helper function to load animation tracks
+	local function loadAnimation(assetId, priority, looped)
+		local anim = Instance.new("Animation")
+		anim.AnimationId = assetId
+		local track = animator:LoadAnimation(anim)
+		track.Priority = priority or Enum.AnimationPriority.Core
+		track.Looped = looped ~= nil and looped or false
+		return track, anim
+	end
+
+	local idleTrack, idleAnim = loadAnimation(ANIMATIONS.Idle, Enum.AnimationPriority.Idle, true)
+	local moveTrack, moveAnim = loadAnimation(ANIMATIONS.WalkRun, Enum.AnimationPriority.Movement, true)
+	local jumpTrack, jumpAnim = loadAnimation(ANIMATIONS.Jump, Enum.AnimationPriority.Action, false)
+	local fallTrack, fallAnim = loadAnimation(ANIMATIONS.Fall, Enum.AnimationPriority.Action, true)
+	local climbTrack, climbAnim = loadAnimation(ANIMATIONS.Climb, Enum.AnimationPriority.Action, true)
+
+	-- State tracking variables
+	local isJumping = false
+	local isFalling = false
+	local isClimbing = false
+
+	local function stopAll()
+		idleTrack:Stop()
+		moveTrack:Stop()
+		jumpTrack:Stop()
+		fallTrack:Stop()
+		climbTrack:Stop()
+	end
+
+	-- 1. Precise movement handling with dynamic animation speed scaling
+	humanoid.Running:Connect(function(speed)
+		if isJumping or isFalling or isClimbing then return end
+
+		if speed > 0.5 then
+			if not moveTrack.IsPlaying then
+				idleTrack:Stop()
+				moveTrack:Play()
+			end
+			moveTrack:AdjustSpeed(speed / 16)
+		else
+			if not idleTrack.IsPlaying then
+				moveTrack:Stop()
+				idleTrack:Play()
+			end
+		end
+	end)
+
+	-- 2. Climb movement speed check (freezes/unfreezes animation)
+	humanoid.Climbing:Connect(function(climbSpeed)
+		if isClimbing then
+			if climbSpeed > 0.1 then
+				if not climbTrack.IsPlaying then
+					climbTrack:Play()
+				end
+				climbTrack:AdjustSpeed(1)
+			else
+				if climbTrack.IsPlaying then
+					climbTrack:AdjustSpeed(0)
+				end
+			end
+		end
+	end)
+
+	-- 3. State machine for transitions
+	humanoid.StateChanged:Connect(function(oldState, newState)
+		if newState == Enum.HumanoidStateType.Jumping then
+			isJumping = true
+			isFalling = false
+			isClimbing = false
+			stopAll()
+			jumpTrack:Play()
+
+		elseif newState == Enum.HumanoidStateType.Freefall then
+			if not isJumping then
+				isFalling = true
+				isClimbing = false
+				stopAll()
+				fallTrack:Play()
+			end
+
+		elseif newState == Enum.HumanoidStateType.Landed then
+			if isFalling or isJumping then
+				isJumping = false
+				isFalling = false
+				isClimbing = false
+				stopAll()
+				
+				if humanoid.MoveDirection.Magnitude > 0 then
+					moveTrack:Play()
+					moveTrack:AdjustSpeed(humanoid.WalkSpeed / 16)
+				else
+					idleTrack:Play()
+				end
+			end
+
+		elseif newState == Enum.HumanoidStateType.Climbing then
+			isClimbing = true
+			isJumping = false
+			isFalling = false
+			stopAll()
+			climbTrack:Play()
+			climbTrack:AdjustSpeed(1)
+
+		elseif oldState == Enum.HumanoidStateType.Climbing then
+			isClimbing = false
+			climbTrack:AdjustSpeed(1)
+			climbTrack:Stop()
+			
+			if humanoid.MoveDirection.Magnitude > 0 then
+				moveTrack:Play()
+				moveTrack:AdjustSpeed(humanoid.WalkSpeed / 16)
+			else
+				idleTrack:Play()
+			end
+		end
+	end)
+
+	-- Start initial state
+	idleTrack:Play()
+
+	-- Cleanup on character death
+	humanoid.Died:Connect(function()
+		stopAll()
+		idleAnim:Destroy()
+		moveAnim:Destroy()
+		jumpAnim:Destroy()
+		fallAnim:Destroy()
+		climbAnim:Destroy()
+	end)
+end
+
+if player.Character then
+	setupCustomAnimations(player.Character)
+end
+
+player.CharacterAdded:Connect(setupCustomAnimations)
