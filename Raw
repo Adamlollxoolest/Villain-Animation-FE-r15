@@ -58,9 +58,10 @@ local function setupCustomAnimations(character)
 		return track, anim
 	end
 
+	-- Jump and Fall are both set to looped = true here
 	local idleTrack, idleAnim = loadAnimation(ANIMATIONS.Idle, Enum.AnimationPriority.Idle, true)
 	local moveTrack, moveAnim = loadAnimation(ANIMATIONS.WalkRun, Enum.AnimationPriority.Movement, true)
-	local jumpTrack, jumpAnim = loadAnimation(ANIMATIONS.Jump, Enum.AnimationPriority.Action, false)
+	local jumpTrack, jumpAnim = loadAnimation(ANIMATIONS.Jump, Enum.AnimationPriority.Action, true)
 	local fallTrack, fallAnim = loadAnimation(ANIMATIONS.Fall, Enum.AnimationPriority.Action, true)
 	local climbTrack, climbAnim = loadAnimation(ANIMATIONS.Climb, Enum.AnimationPriority.Action, true)
 
@@ -121,12 +122,12 @@ local function setupCustomAnimations(character)
 			jumpTrack:Play()
 
 		elseif newState == Enum.HumanoidStateType.Freefall then
-			if not isJumping then
-				isFalling = true
-				isClimbing = false
-				stopAll()
-				fallTrack:Play()
-			end
+			-- Transition seamlessly from jump to loop-falling if we were jumping or just fell off an edge
+			isJumping = false
+			isFalling = true
+			isClimbing = false
+			stopAll()
+			fallTrack:Play()
 
 		elseif newState == Enum.HumanoidStateType.Landed then
 			if isFalling or isJumping then
