@@ -112,12 +112,20 @@ local function createMobileUI()
 		boxCorner.CornerRadius = UDim.new(0, 6)
 		boxCorner.Parent = box
 
-		box.FocusLost:Connect(function()
+		local function updateValue()
 			local num = tonumber(box.Text)
 			if num then
 				callback(num)
 			else
 				box.Text = tostring(defaultVal)
+			end
+		end
+
+		box.FocusLost:Connect(updateValue)
+		box:GetPropertyChangedSignal("Text"):Connect(function()
+			local num = tonumber(box.Text)
+			if num then
+				callback(num)
 			end
 		end)
 	end
@@ -305,6 +313,7 @@ local function setupCustomAnimations(character)
 		local rayResult = workspace:Raycast(rootPart.Position, Vector3.new(0, -500, 0), rayParams)
 		local groundHeight = rayResult and (rootPart.Position.Y - rayResult.Position.Y) or 0
 		
+		-- Dynamically read CFG values when calculating duration
 		calculatedGlideDuration = math.min(
 			CFG.BaseGlideDuration + (groundHeight * CFG.HeightBonusFactor), 
 			CFG.MaxGlideDuration
