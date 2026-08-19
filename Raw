@@ -3,19 +3,11 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
-local PhysicsService = game:GetService("PhysicsService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local SAVE_FILE_NAME = "CFG_SavedSettings.json"
-
--- Setup Anti-Fling Physics Collision Group
-local ANTI_FLING_GROUP = "AntiFlingCollisionGroup"
-pcall(function()
-	PhysicsService:CreateCollisionGroup(ANTI_FLING_GROUP)
-	PhysicsService:CollisionGroupSetCollidable(ANTI_FLING_GROUP, ANTI_FLING_GROUP, false)
-end)
 
 -- ==========================================
 -- DEFAULT CFG (CONFIGURATION)
@@ -347,7 +339,7 @@ local function setupCustomAnimations(character)
 	local glideStartTime = 0
 	local calculatedGlideDuration = CFG.BaseGlideDuration
 	local linearVelocity, glideAttachment = nil, nil
-	local noclipConn, renderConn = nil, nil
+	local noclipConn, renderConn, antiFlingConn = nil, nil, nil
 	local currentMovementTrack = nil
 
 	-- Persistent Trail Objects
@@ -437,16 +429,24 @@ local function setupCustomAnimations(character)
 		persistentTrail.Enabled = true
 	end
 
-	-- Anti-Fling via Collision Groups (Completely removes player-to-player collision friction & slow down)
+	-- Bulletproof Anti-Fling: Disables collision against all other players while keeping walls/floors fully solid
 	local function setAntiFlingState(enable)
 		isAntiFlingActive = enable
-		pcall(function()
-			for _, part in ipairs(character:GetDescendants()) do
-				if part:IsA("BasePart") then
-					PhysicsService:SetPartCollisionGroup(part, enable and ANTI_FLING_GROUP or "Default")
+		if antiFlingConn then antiFlingConn:Disconnect(); antiFlingConn = nil end
+
+		if isAntiFlingActive then
+			antiFlingConn = RunService.Stepped:Connect(function()
+				for _, p in ipairs(Players:GetPlayers()) do
+					if p ~= player and p.Character then
+						for _, part in ipairs(p.Character:GetDescendants()) do
+							if part:IsA("BasePart") then
+								part.CanCollide = false
+							end
+						end
+					end
 				end
-			end
-		end)
+			end)
+		end
 	end
 
 	local function setNoclipState(enable)
