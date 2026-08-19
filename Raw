@@ -61,7 +61,7 @@ loadCFG()
 local ANIMATIONS = {
 	Idle = "rbxassetid://121480327509940",
 	Walk = "rbxassetid://118959209918644",
-	Run = "rbxassetid://83394429685133",
+	Run = "rbxassetid://139200621657701", -- Updated to your exact requested run asset ID
 	NormalJump = "rbxassetid://656117878",
 	SprintJump = "rbxassetid://87628280298366",
 	NormalFall = "rbxassetid://656115606",
@@ -310,7 +310,7 @@ local function setupCustomAnimations(character)
 		end
 	end)
 
-	local function loadAnimation(name, assetId, priority, looped)
+	local function loadAnimation(assetId, priority, looped)
 		local anim = Instance.new("Animation")
 		anim.AnimationId = assetId
 		
@@ -318,24 +318,24 @@ local function setupCustomAnimations(character)
 			return animator:LoadAnimation(anim)
 		end)
 		
-		if not success or not track then return nil, anim end
+		if not success or not track then return nil end
 
 		track.Priority = priority or Enum.AnimationPriority.Action
 		track.Looped = looped ~= nil and looped or false
-		return track, anim
+		return track
 	end
 
-	local idleTrack = loadAnimation("Idle", ANIMATIONS.Idle, Enum.AnimationPriority.Idle, true)
-	local walkTrack = loadAnimation("Walk", ANIMATIONS.Walk, Enum.AnimationPriority.Action2, true)
-	local runTrack = loadAnimation("Run", ANIMATIONS.Run, Enum.AnimationPriority.Action4, true)
+	local idleTrack = loadAnimation(ANIMATIONS.Idle, Enum.AnimationPriority.Idle, true)
+	local walkTrack = loadAnimation(ANIMATIONS.Walk, Enum.AnimationPriority.Action2, true)
+	local runTrack = loadAnimation(ANIMATIONS.Run, Enum.AnimationPriority.Action4, true)
 	
-	local normalJumpTrack = loadAnimation("NormalJump", ANIMATIONS.NormalJump, Enum.AnimationPriority.Action4, false)
-	local sprintJumpTrack = loadAnimation("SprintJump", ANIMATIONS.SprintJump, Enum.AnimationPriority.Action4, false)
-	local normalFallTrack = loadAnimation("NormalFall", ANIMATIONS.NormalFall, Enum.AnimationPriority.Action4, true)
-	local sprintFallTrack = loadAnimation("SprintFall", ANIMATIONS.SprintFall, Enum.AnimationPriority.Action4, true)
+	local normalJumpTrack = loadAnimation(ANIMATIONS.NormalJump, Enum.AnimationPriority.Action4, false)
+	local sprintJumpTrack = loadAnimation(ANIMATIONS.SprintJump, Enum.AnimationPriority.Action4, false)
+	local normalFallTrack = loadAnimation(ANIMATIONS.NormalFall, Enum.AnimationPriority.Action4, true)
+	local sprintFallTrack = loadAnimation(ANIMATIONS.SprintFall, Enum.AnimationPriority.Action4, true)
 	
-	local normalClimbTrack = loadAnimation("NormalClimb", ANIMATIONS.NormalClimb, Enum.AnimationPriority.Action3, true)
-	local sprintClimbTrack = loadAnimation("SprintClimb", ANIMATIONS.SprintClimb, Enum.AnimationPriority.Action4, true)
+	local normalClimbTrack = loadAnimation(ANIMATIONS.NormalClimb, Enum.AnimationPriority.Action3, true)
+	local sprintClimbTrack = loadAnimation(ANIMATIONS.SprintClimb, Enum.AnimationPriority.Action4, true)
 
 	local isJumping, isFalling, isClimbing, isSprinting = false, false, false, false
 	local isWallRunning, isWallRunActive, isGlideActive, isGliding, isAntiFlingActive = false, false, false, false, false
