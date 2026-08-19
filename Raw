@@ -3,6 +3,7 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -35,7 +36,7 @@ local CFG = {
 }
 
 local isNoclipActive = false
-local trackedShiftlockGuis = {}
+local trackedINFHHItems = {} -- Stores every single item spawned by INF-HH
 
 local function saveCFG()
 	if writefile then
@@ -70,43 +71,64 @@ local ANIMATIONS = {
 	SprintClimb = "rbxassetid://88763136693023",
 }
 
--- Shiftlock State & Targeted Destruction Handler
+-- Absolute Destruction Handler for INF-HH Shiftlock
 local function setShiftlockState(state)
 	CFG.Shiftlock = state
 	saveCFG()
 	
 	if state then
-		local connection
-		connection = playerGui.ChildAdded:Connect(function(child)
-			if child:IsA("ScreenGui") and child.Name ~= "MobileControlGui" and child.Name ~= "TouchGui" then
-				table.insert(trackedShiftlockGuis, child)
-			end
-		end)
+		-- Actively capture any new UI/ScreenGuis added to PlayerGui or CoreGui while INF-HH loads
+		local connections = {}
+		
+		local function trackContainer(container)
+			table.insert(connections, container.DescendantAdded:Connect(function(descendant)
+				if descendant ~= playerGui and descendant.Name ~= "TouchGui" and descendant.Name ~= "MobileControlGui" then
+					table.insert(trackedINFHHItems, descendant)
+				end
+			end))
+		end
 
+		trackContainer(playerGui)
+		pcall(function() trackContainer(CoreGui) end)
+
+		-- Execute the INF-HH script
 		pcall(function()
 			loadstring(game:HttpGet("https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script"))()
 		end)
 
-		task.delay(1.5, function()
-			if connection then connection:Disconnect() end
+		-- Stop tracking after 2 seconds to lock in its items
+		task.delay(2.0, function()
+			for _, conn in ipairs(connections) do
+				pcall(function() conn:Disconnect() end)
+			end
 		end)
 	else
-		-- Destroys the tracked GUIs spawned by the external script
-		for _, gui in ipairs(trackedShiftlockGuis) do
-			if gui and gui.Parent then
-				pcall(function() gui:Destroy() end)
+		-- 1. Destroy all dynamically tracked items spawned by INF-HH
+		for _, item in ipairs(trackedINFHHItems) do
+			if item and item.Parent then
+				pcall(function() item:Destroy() end)
 			end
 		end
-		trackedShiftlockGuis = {}
+		trackedINFHHItems = {}
 
-		-- Safety sweep for leftover INF-HH UI elements while strictly ignoring Roblox TouchGui/Joystick
+		-- 2. Deep clean PlayerGui for anything related to shiftlock/INF-HH (protecting TouchGui & MobileControlGui)
 		pcall(function()
 			for _, gui in ipairs(playerGui:GetChildren()) do
 				if gui.Name ~= "MobileControlGui" and gui.Name ~= "TouchGui" then
 					local nameLower = string.lower(gui.Name)
-					if nameLower:find("shift") or nameLower:find("lock") or nameLower:find("inf") or nameLower:find("hh") then
+					if nameLower:find("shift") or nameLower:find("lock") or nameLower:find("inf") or nameLower:find("hh") or nameLower:find("gui") then
 						gui:Destroy()
 					end
+				end
+			end
+		end)
+
+		-- 3. Deep clean CoreGui for INF-HH elements if accessible
+		pcall(function()
+			for _, gui in ipairs(CoreGui:GetChildren()) do
+				local nameLower = string.lower(gui.Name)
+				if nameLower:find("shift") or nameLower:find("lock") or nameLower:find("inf") or nameLower:find("hh") then
+					gui:Destroy()
 				end
 			end
 		end)
