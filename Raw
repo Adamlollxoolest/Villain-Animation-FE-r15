@@ -2,10 +2,13 @@ local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local camera = Workspace.CurrentCamera
+
+local SAVE_FILE_NAME = "CFG_SavedSettings.json"
 
 -- ==========================================
 -- DEFAULT CFG (CONFIGURATION)
@@ -17,11 +20,11 @@ local CFG = {
 	JumpPower = 80,
 	
 	-- Glide Settings
-	BaseGlideDuration = 1.0,     -- Base duration in seconds
-	HeightBonusFactor = 0.05,    -- Extra duration added per stud of altitude
-	MaxGlideDuration = 10.0,     -- Cap for max glide duration
-	GlideFallSpeed = -5,         -- Float descent speed (gentle glide)
-	GlideForwardMultiplier = 1.2, -- Speed multiplier while gliding forward
+	BaseGlideDuration = 1.0,
+	HeightBonusFactor = 0.05,
+	MaxGlideDuration = 10.0,
+	GlideFallSpeed = -5,
+	GlideForwardMultiplier = 1.2,
 
 	-- Execution & Trigger Automation Flags
 	AutoAntiFlingOnExec = false,
@@ -30,19 +33,41 @@ local CFG = {
 	AutoWallRunOnSprint = false
 }
 
+-- Save & Load Helpers (Executor File I/O Compatibility)
+local function saveCFG()
+	if writefile then
+		pcall(function()
+			writefile(SAVE_FILE_NAME, HttpService:JSONEncode(CFG))
+		end)
+	end
+end
+
+local function loadCFG()
+	if readfile and isfile and isfile(SAVE_FILE_NAME) then
+		pcall(function()
+			local decoded = HttpService:JSONDecode(readfile(SAVE_FILE_NAME))
+			for key, val in pairs(decoded) do
+				CFG[key] = val
+			end
+		end)
+	end
+end
+
+loadCFG() -- Load persistent values prior to rendering interface
+
 local ANIMATIONS = {
 	Idle = "rbxassetid://121480327509940",
-	Walk = "rbxassetid://118959209918644",         -- Normal walk / Mahoraga Walk
-	Run = "rbxassetid://83394429685133",           -- Super sprint
-	NormalJump = "rbxassetid://656117878",         -- Ninja Jump (Sprint OFF)
-	SprintJump = "rbxassetid://87628280298366",     -- Custom Jump (Sprint ON)
-	NormalFall = "rbxassetid://656115606",         -- Ninja Fall (Sprint OFF)
-	SprintFall = "rbxassetid://81030893339218",     -- Custom Fall (Sprint ON)
-	NormalClimb = "rbxassetid://656114359",        -- Ninja Climb (Sprint OFF)
-	SprintClimb = "rbxassetid://88763136693023",    -- Custom Climb & Wall Run
+	Walk = "rbxassetid://118959209918644",
+	Run = "rbxassetid://83394429685133",
+	NormalJump = "rbxassetid://656117878",
+	SprintJump = "rbxassetid://87628280298366",
+	NormalFall = "rbxassetid://656115606",
+	SprintFall = "rbxassetid://81030893339218",
+	NormalClimb = "rbxassetid://656114359",
+	SprintClimb = "rbxassetid://88763136693023",
 }
 
--- Mobile UI Setup (Positioned North-West / Top-Left)
+-- Mobile UI Setup
 local function createMobileUI()
 	local existingGui = playerGui:FindFirstChild("MobileControlGui")
 	if existingGui then existingGui:Destroy() end
@@ -93,11 +118,8 @@ local function createMobileUI()
 	frameCorner.CornerRadius = UDim.new(0, 10)
 	frameCorner.Parent = cfgFrame
 
-	-- Dragging Logic for CFG Frame
-	local dragging = false
-	local dragInput = nil
-	local dragStart = nil
-	local startPos = nil
+	-- Dragging Logic
+	local dragging, dragInput, dragStart, startPos
 
 	local function updateDrag(input)
 		local delta = input.Position - dragStart
@@ -160,6 +182,7 @@ local function createMobileUI()
 			local num = tonumber(box.Text)
 			if num then
 				callback(num)
+				saveCFG()
 			else
 				box.Text = tostring(defaultVal)
 			end
@@ -170,11 +193,11 @@ local function createMobileUI()
 			local num = tonumber(box.Text)
 			if num then
 				callback(num)
+				saveCFG()
 			end
 		end)
 	end
 
-	-- Custom Toggle/Slider UI Component for Auto-Settings
 	local function createCFGToggle(labelText, defaultState, posY, callback)
 		local label = Instance.new("TextLabel")
 		label.Size = UDim2.new(0, 190, 0, 30)
@@ -220,6 +243,7 @@ local function createMobileUI()
 				sliderKnob.Position = UDim2.new(0, 2, 0, 2)
 			end
 			callback(state)
+			saveCFG()
 		end)
 	end
 
@@ -301,33 +325,21 @@ local function setupCustomAnimations(character)
 	local normalClimbTrack, normalClimbAnim = loadAnimation("NormalClimb", ANIMATIONS.NormalClimb, Enum.AnimationPriority.Action3, true)
 	local sprintClimbTrack, sprintClimbAnim = loadAnimation("SprintClimb", ANIMATIONS.SprintClimb, Enum.AnimationPriority.Action4, true)
 
-	local isJumping = false
-	local isFalling = false
-	local isClimbing = false
-	local isSprinting = false
-	local isWallRunning = false
-	local isWallRunActive = false
-	local isGlideActive = false
-	local isGliding = false
-	local isAntiFlingActive = false
+	local isJumping, isFalling, isClimbing, isSprinting = false, false, false, false
+	local isWallRunning, isWallRunActive, isGlideActive, isGliding, isAntiFlingActive = false, false, false, false, false
 	
 	local glideStartTime = 0
 	local calculatedGlideDuration = CFG.BaseGlideDuration
-	local linearVelocity = nil
-	local glideAttachment = nil
-
-	local antiFlingConn = nil
-	local renderConn = nil
+	local linearVelocity, glideAttachment = nil, nil
+	local antiFlingConn, renderConn = nil, nil
 
 	-- Persistent Trail Objects
 	local att0 = Instance.new("Attachment")
 	att0.Position = Vector3.new(0, 1, 0)
-	att0.Name = "GlideTrailAtt0"
 	att0.Parent = rootPart
 
 	local att1 = Instance.new("Attachment")
 	att1.Position = Vector3.new(0, -1, 0)
-	att1.Name = "GlideTrailAtt1"
 	att1.Parent = rootPart
 
 	local persistentTrail = Instance.new("Trail")
@@ -344,16 +356,12 @@ local function setupCustomAnimations(character)
 	local function playSafe(track)
 		if track then
 			track.TimePosition = 0
-			if not track.IsPlaying then
-				track:Play()
-			end
+			if not track.IsPlaying then track:Play() end
 		end
 	end
 
 	local function stopSafe(track)
-		if track and track.IsPlaying then
-			track:Stop()
-		end
+		if track and track.IsPlaying then track:Stop() end
 	end
 
 	local function stopAllMovement()
@@ -378,35 +386,13 @@ local function setupCustomAnimations(character)
 		stopAllMovement()
 		stopAirAnimations()
 		stopClimbAnimations()
-		
-		for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-			if track ~= idleTrack and track ~= walkTrack and track ~= runTrack 
-			   and track ~= normalJumpTrack and track ~= sprintJumpTrack 
-			   and track ~= normalFallTrack and track ~= sprintFallTrack 
-			   and track ~= normalClimbTrack and track ~= sprintClimbTrack then
-				track:Stop()
-			end
-		end
-	end
-
-	local function applySafetyBrake()
-		if rootPart then
-			rootPart.AssemblyLinearVelocity = Vector3.new(0, rootPart.AssemblyLinearVelocity.Y, 0)
-		end
 	end
 
 	local function stopGliding()
 		isGliding = false
 		persistentTrail.Enabled = false
-		
-		if linearVelocity then
-			linearVelocity:Destroy()
-			linearVelocity = nil
-		end
-		if glideAttachment then
-			glideAttachment:Destroy()
-			glideAttachment = nil
-		end
+		if linearVelocity then linearVelocity:Destroy(); linearVelocity = nil end
+		if glideAttachment then glideAttachment:Destroy(); glideAttachment = nil end
 	end
 
 	local function startGliding()
@@ -419,17 +405,12 @@ local function setupCustomAnimations(character)
 		local rayResult = workspace:Raycast(rootPart.Position, Vector3.new(0, -500, 0), rayParams)
 		local groundHeight = rayResult and (rootPart.Position.Y - rayResult.Position.Y) or 0
 		
-		calculatedGlideDuration = math.min(
-			CFG.BaseGlideDuration + (groundHeight * CFG.HeightBonusFactor), 
-			CFG.MaxGlideDuration
-		)
-		
+		calculatedGlideDuration = math.min(CFG.BaseGlideDuration + (groundHeight * CFG.HeightBonusFactor), CFG.MaxGlideDuration)
 		isGliding = true
 		glideStartTime = tick()
 
 		if not glideAttachment then
 			glideAttachment = Instance.new("Attachment")
-			glideAttachment.Name = "GlideAttachment"
 			glideAttachment.Parent = rootPart
 		end
 
@@ -446,27 +427,25 @@ local function setupCustomAnimations(character)
 
 	local function setAntiFlingState(enable)
 		isAntiFlingActive = enable
-		
-		if antiFlingConn then
-			antiFlingConn:Disconnect()
-			antiFlingConn = nil
-		end
+		if antiFlingConn then antiFlingConn:Disconnect(); antiFlingConn = nil end
 
 		if isAntiFlingActive then
 			antiFlingConn = RunService.Stepped:Connect(function()
-				for _, part in ipairs(character:GetDescendants()) do
-					if part:IsA("BasePart") then
-						part.CanCollide = false
+				if character then
+					for _, part in ipairs(character:GetDescendants()) do
+						if part:IsA("BasePart") then part.CanCollide = false end
 					end
 				end
 			end)
 		else
-			for _, part in ipairs(character:GetDescendants()) do
-				if part:IsA("BasePart") then
-					if part.Name == "HumanoidRootPart" or part.Name == "Torso" or part.Name == "UpperTorso" or part.Name == "LowerTorso" then
-						part.CanCollide = true
-					else
-						part.CanCollide = false
+			if character then
+				for _, part in ipairs(character:GetDescendants()) do
+					if part:IsA("BasePart") then
+						if part.Name == "HumanoidRootPart" or part.Name == "Torso" or part.Name == "UpperTorso" or part.Name == "LowerTorso" then
+							part.CanCollide = true
+						else
+							part.CanCollide = false
+						end
 					end
 				end
 			end
@@ -478,34 +457,21 @@ local function setupCustomAnimations(character)
 
 		if humanoid.MoveDirection.Magnitude > 0.05 then
 			stopSafe(idleTrack)
-			
 			if isSprinting then
 				stopSafe(walkTrack)
-				if runTrack then
-					if not runTrack.IsPlaying then
-						runTrack.TimePosition = 0
-						runTrack:Play()
-					end
-					runTrack:AdjustSpeed(2.5)
-				end
+				if runTrack and not runTrack.IsPlaying then runTrack:Play() end
+				if runTrack then runTrack:AdjustSpeed(2.5) end
 			else
 				stopSafe(runTrack)
-				if walkTrack then
-					if not walkTrack.IsPlaying then
-						walkTrack.TimePosition = 0
-						walkTrack:Play()
-					end
-					walkTrack:AdjustSpeed(1)
-				end
+				if walkTrack and not walkTrack.IsPlaying then walkTrack:Play() end
+				if walkTrack then walkTrack:AdjustSpeed(1) end
 			end
 		else
 			stopAllMovement()
-			applySafetyBrake()
 			playSafe(idleTrack)
 		end
 	end
 
-	-- Raycast Wall Run Logic
 	local function updateWallRun()
 		if not isSprinting or not isWallRunActive then
 			if isWallRunning then
@@ -521,38 +487,25 @@ local function setupCustomAnimations(character)
 		rayParams.FilterDescendantsInstances = {character}
 		rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
-		local lookVector = rootPart.CFrame.LookVector
-		local rayResult = workspace:Raycast(rootPart.Position, lookVector * 3.5, rayParams)
+		local rayResult = workspace:Raycast(rootPart.Position, rootPart.CFrame.LookVector * 3.5, rayParams)
 
 		if rayResult and rayResult.Instance and rayResult.Instance.CanCollide then
 			if math.abs(rayResult.Normal.Y) < 0.3 then
 				if not isWallRunning then
 					isWallRunning = true
-					isJumping = false
-					isFalling = false
 					stopGliding()
-					
 					stopSafe(idleTrack)
 					stopAllMovement()
 					stopAirAnimations()
-					stopSafe(normalClimbTrack)
-
-					if sprintClimbTrack then
-						sprintClimbTrack.TimePosition = 0
-						sprintClimbTrack:Play()
-					end
+					if sprintClimbTrack then sprintClimbTrack:Play() end
 				end
 
 				if humanoid.MoveDirection.Magnitude > 0.05 then
 					rootPart.AssemblyLinearVelocity = Vector3.new(0, CFG.WallRunSpeed, 0)
-					if sprintClimbTrack then
-						sprintClimbTrack:AdjustSpeed(2.5)
-					end
+					if sprintClimbTrack then sprintClimbTrack:AdjustSpeed(2.5) end
 				else
 					rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-					if sprintClimbTrack then
-						sprintClimbTrack:AdjustSpeed(0)
-					end
+					if sprintClimbTrack then sprintClimbTrack:AdjustSpeed(0) end
 				end
 				return
 			end
@@ -567,7 +520,6 @@ local function setupCustomAnimations(character)
 	end
 
 	local sprintBtn, antiFlingBtn, wallRunBtn, glideBtn = createMobileUI()
-	local sprintConn, antiFlingBtnConn, wallRunBtnConn, glideBtnConn
 
 	local function toggleSprint(enable)
 		isSprinting = enable
@@ -578,64 +530,39 @@ local function setupCustomAnimations(character)
 		if isSprinting then
 			sprintBtn.Text = "Sprint: ON"
 			sprintBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-			
-			if CFG.AutoGlideOnSprint then
-				isGlideActive = true
-				glideBtn.Text = "Glide: ON"
-				glideBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-			end
-			
-			if CFG.AutoWallRunOnSprint then
-				isWallRunActive = true
-				wallRunBtn.Text = "Wall Run: ON"
-				wallRunBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-			end
+			if CFG.AutoGlideOnSprint then isGlideActive = true; glideBtn.Text = "Glide: ON"; glideBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50) end
+			if CFG.AutoWallRunOnSprint then isWallRunActive = true; wallRunBtn.Text = "Wall Run: ON"; wallRunBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50) end
 		else
 			sprintBtn.Text = "Sprint: OFF"
 			sprintBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-			
 			isWallRunActive = false
 			isWallRunning = false
 			isGlideActive = false
 			stopGliding()
-			
-			wallRunBtn.Text = "Wall Run: OFF"
-			wallRunBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-			
-			glideBtn.Text = "Glide: OFF"
-			glideBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-			
+			wallRunBtn.Text = "Wall Run: OFF"; wallRunBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+			glideBtn.Text = "Glide: OFF"; glideBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
 			stopClimbAnimations()
 		end
-		
 		stopAllMovement()
 		updateMovementAnimation()
 	end
 
-	humanoid:GetPropertyChangedSignal("MoveDirection"):Connect(function()
-		updateMovementAnimation()
-	end)
+	humanoid:GetPropertyChangedSignal("MoveDirection"):Connect(updateMovementAnimation)
 
 	-- PC Inputs
-	local inputBeganConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		if gameProcessed then return end
-		if input.KeyCode == Enum.KeyCode.LeftShift then
-			toggleSprint(true)
-		end
+	UserInputService.InputBegan:Connect(function(input, gpe)
+		if gpe then return end
+		if input.KeyCode == Enum.KeyCode.LeftShift then toggleSprint(true) end
 	end)
 
-	local inputEndedConn = UserInputService.InputEnded:Connect(function(input)
-		if input.KeyCode == Enum.KeyCode.LeftShift then
-			toggleSprint(false)
-		end
+	UserInputService.InputEnded:Connect(function(input)
+		if input.KeyCode == Enum.KeyCode.LeftShift then toggleSprint(false) end
 	end)
 
-	-- Mobile Controls
-	sprintConn = sprintBtn.MouseButton1Click:Connect(function()
-		toggleSprint(not isSprinting)
-	end)
+	-- Buttons
+	sprintBtn.MouseButton1Click:Connect(function() toggleSprint(not isSprinting) end)
 
-	antiFlingBtnConn = antiFlingBtn.MouseButton1Click:Connect(function()
+	antiFlingBtn.MouseButton1Click:Connect(function()
 		if isAntiFlingActive then
 			antiFlingBtn.Text = "Anti Fling: OFF"
 			antiFlingBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
@@ -647,53 +574,38 @@ local function setupCustomAnimations(character)
 		end
 	end)
 
-	wallRunBtnConn = wallRunBtn.MouseButton1Click:Connect(function()
-		if isWallRunActive then
-			isWallRunActive = false
-			isWallRunning = false
-			humanoid.WalkSpeed = isSprinting and CFG.SprintSpeed or CFG.WalkSpeed
-			wallRunBtn.Text = "Wall Run: OFF"
-			wallRunBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-			stopClimbAnimations()
-			updateMovementAnimation()
-		else
-			isWallRunActive = true
-			wallRunBtn.Text = "Wall Run: ON"
-			wallRunBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-		end
+	wallRunBtn.MouseButton1Click:Connect(function()
+		isWallRunActive = not isWallRunActive
+		wallRunBtn.Text = isWallRunActive and "Wall Run: ON" or "Wall Run: OFF"
+		wallRunBtn.BackgroundColor3 = isWallRunActive and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(220, 50, 50)
+		if not isWallRunActive then isWallRunning = false; stopClimbAnimations(); updateMovementAnimation() end
 	end)
 
-	glideBtnConn = glideBtn.MouseButton1Click:Connect(function()
-		if isGlideActive then
-			isGlideActive = false
-			stopGliding()
-			glideBtn.Text = "Glide: OFF"
-			glideBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-		else
-			isGlideActive = true
-			glideBtn.Text = "Glide: ON"
-			glideBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-		end
+	glideBtn.MouseButton1Click:Connect(function()
+		isGlideActive = not isGlideActive
+		glideBtn.Text = isGlideActive and "Glide: ON" or "Glide: OFF"
+		glideBtn.BackgroundColor3 = isGlideActive and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(220, 50, 50)
+		if not isGlideActive then stopGliding() end
 	end)
 
-	-- Initialize Execution-based Toggles
-	if CFG.AutoAntiFlingOnExec then
-		antiFlingBtn.Text = "Anti Fling: ON"
-		antiFlingBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-		setAntiFlingState(true)
-	end
+	-- Initialize Execution-based Toggles After Frame Yield
+	task.defer(function()
+		if CFG.AutoAntiFlingOnExec then
+			antiFlingBtn.Text = "Anti Fling: ON"
+			antiFlingBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+			setAntiFlingState(true)
+		end
 
-	if CFG.AutoSprintOnExec then
-		toggleSprint(true)
-	end
+		if CFG.AutoSprintOnExec then
+			toggleSprint(true)
+		end
+	end)
 
 	-- Render Loop
 	renderConn = RunService.RenderStepped:Connect(function()
 		updateWallRun()
-
 		if isWallRunning then return end
 
-		-- Modern Velocity Glide Management
 		if isGliding then
 			if (tick() - glideStartTime) > calculatedGlideDuration then
 				stopGliding()
@@ -701,10 +613,8 @@ local function setupCustomAnimations(character)
 				local moveDir = humanoid.MoveDirection
 				local moveVel = moveDir * (CFG.SprintSpeed * CFG.GlideForwardMultiplier)
 				linearVelocity.VectorVelocity = Vector3.new(moveVel.X, CFG.GlideFallSpeed, moveVel.Z)
-
 				if moveDir.Magnitude > 0.1 then
-					local flatLookVector = Vector3.new(moveDir.X, 0, moveDir.Z).Unit
-					rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + flatLookVector)
+					rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + Vector3.new(moveDir.X, 0, moveDir.Z).Unit)
 				end
 			end
 		end
@@ -718,95 +628,20 @@ local function setupCustomAnimations(character)
 				stopAllMovement()
 				stopSafe(normalJumpTrack)
 				stopSafe(sprintJumpTrack)
-
-				if isSprinting then
-					stopSafe(normalFallTrack)
-					playSafe(sprintFallTrack)
-				else
-					stopSafe(sprintFallTrack)
-					playSafe(normalFallTrack)
-				end
+				if isSprinting then playSafe(sprintFallTrack) else playSafe(normalFallTrack) end
 			end
-			
 			if isSprinting and isGlideActive and not isGliding and rootPart.AssemblyLinearVelocity.Y <= 2 then
 				startGliding()
 			end
 		end
 	end)
 
-	-- Standard Climbing
-	humanoid.Climbing:Connect(function(climbSpeed)
-		if isClimbing and not isWallRunning then
-			stopGliding()
-			local activeTrack = isSprinting and sprintClimbTrack or normalClimbTrack
-			local inactiveTrack = isSprinting and normalClimbTrack or sprintClimbTrack
-			
-			stopSafe(inactiveTrack)
-			
-			if climbSpeed > 0.1 then
-				playSafe(activeTrack)
-				if activeTrack then activeTrack:AdjustSpeed(1) end
-			else
-				if activeTrack and activeTrack.IsPlaying then activeTrack:AdjustSpeed(0) end
-			end
-		end
-	end)
-
 	humanoid.StateChanged:Connect(function(oldState, newState)
 		if newState == Enum.HumanoidStateType.Jumping then
-			isJumping = true
-			isFalling = false
-			isClimbing = false
-			isWallRunning = false
-			stopGliding()
-			
-			stopSafe(idleTrack)
-			stopAllMovement()
-			stopClimbAnimations()
-			stopSafe(normalFallTrack)
-			stopSafe(sprintFallTrack)
-
-			if isSprinting then
-				stopSafe(normalJumpTrack)
-				playSafe(sprintJumpTrack)
-			else
-				stopSafe(sprintJumpTrack)
-				playSafe(normalJumpTrack)
-			end
-
+			isJumping = true; isFalling = false; stopGliding(); stopAll()
+			if isSprinting then playSafe(sprintJumpTrack) else playSafe(normalJumpTrack) end
 		elseif newState == Enum.HumanoidStateType.Landed then
-			isJumping = false
-			isFalling = false
-			isClimbing = false
-			isWallRunning = false
-			stopGliding()
-			stopAirAnimations()
-			stopClimbAnimations()
-			updateMovementAnimation()
-
-		elseif newState == Enum.HumanoidStateType.Climbing then
-			isClimbing = true
-			isJumping = false
-			isFalling = false
-			stopGliding()
-			stopSafe(idleTrack)
-			stopAllMovement()
-			stopAirAnimations()
-			
-			if isSprinting then
-				stopSafe(normalClimbTrack)
-				playSafe(sprintClimbTrack)
-				if sprintClimbTrack then sprintClimbTrack:AdjustSpeed(1) end
-			else
-				stopSafe(sprintClimbTrack)
-				playSafe(normalClimbTrack)
-				if normalClimbTrack then normalClimbTrack:AdjustSpeed(1) end
-			end
-
-		elseif oldState == Enum.HumanoidStateType.Climbing then
-			isClimbing = false
-			stopClimbAnimations()
-			updateMovementAnimation()
+			isJumping = false; isFalling = false; stopGliding(); stopAirAnimations(); updateMovementAnimation()
 		end
 	end)
 
@@ -816,30 +651,9 @@ local function setupCustomAnimations(character)
 		stopAll()
 		stopGliding()
 		setAntiFlingState(false)
-		if persistentTrail then persistentTrail:Destroy() end
-		if att0 then att0:Destroy() end
-		if att1 then att1:Destroy() end
 		if renderConn then renderConn:Disconnect() end
-		if inputBeganConn then inputBeganConn:Disconnect() end
-		if inputEndedConn then inputEndedConn:Disconnect() end
-		if sprintConn then sprintConn:Disconnect() end
-		if antiFlingBtnConn then antiFlingBtnConn:Disconnect() end
-		if wallRunBtnConn then wallRunBtnConn:Disconnect() end
-		if glideBtnConn then glideBtnConn:Disconnect() end
-		idleAnim:Destroy()
-		walkAnim:Destroy()
-		runAnim:Destroy()
-		normalJumpAnim:Destroy()
-		sprintJumpAnim:Destroy()
-		normalFallAnim:Destroy()
-		sprintFallAnim:Destroy()
-		normalClimbAnim:Destroy()
-		sprintClimbAnim:Destroy()
 	end)
 end
 
-if player.Character then
-	setupCustomAnimations(player.Character)
-end
-
+if player.Character then setupCustomAnimations(player.Character) end
 player.CharacterAdded:Connect(setupCustomAnimations)
