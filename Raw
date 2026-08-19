@@ -10,6 +10,13 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local SAVE_FILE_NAME = "CFG_SavedSettings.json"
 
+-- Setup Anti-Fling Physics Collision Group
+local ANTI_FLING_GROUP = "AntiFlingCollisionGroup"
+pcall(function()
+	PhysicsService:CreateCollisionGroup(ANTI_FLING_GROUP)
+	PhysicsService:CollisionGroupSetCollidable(ANTI_FLING_GROUP, ANTI_FLING_GROUP, false)
+end)
+
 -- ==========================================
 -- DEFAULT CFG (CONFIGURATION)
 -- ==========================================
@@ -340,7 +347,7 @@ local function setupCustomAnimations(character)
 	local glideStartTime = 0
 	local calculatedGlideDuration = CFG.BaseGlideDuration
 	local linearVelocity, glideAttachment = nil, nil
-	local antiFlingConn, noclipConn, renderConn = nil, nil
+	local noclipConn, renderConn = nil, nil
 	local currentMovementTrack = nil
 
 	-- Persistent Trail Objects
@@ -430,40 +437,16 @@ local function setupCustomAnimations(character)
 		persistentTrail.Enabled = true
 	end
 
-	-- Anti-Fling: Disables collision strictly between you and other players using NoCollisionConstraint
-	local antiFlingConstraints = {}
+	-- Anti-Fling via Collision Groups (Completely removes player-to-player collision friction & slow down)
 	local function setAntiFlingState(enable)
 		isAntiFlingActive = enable
-		for _, constraint in ipairs(antiFlingConstraints) do
-			if constraint then constraint:Destroy() end
-		end
-		antiFlingConstraints = {}
-
-		if isAntiFlingActive then
-			local function applyConstraint(otherChar)
-				if not otherChar or otherChar == character then return end
-				local otherRoot = otherChar:FindFirstChild("HumanoidRootPart")
-				if otherRoot and rootPart then
-					local constraint = Instance.new("NoCollisionConstraint")
-					constraint.Part0 = rootPart
-					constraint.Part1 = otherRoot
-					constraint.Parent = character
-					table.insert(antiFlingConstraints, constraint)
+		pcall(function()
+			for _, part in ipairs(character:GetDescendants()) do
+				if part:IsA("BasePart") then
+					PhysicsService:SetPartCollisionGroup(part, enable and ANTI_FLING_GROUP or "Default")
 				end
 			end
-
-			for _, p in ipairs(Players:GetPlayers()) do
-				if p ~= player and p.Character then
-					applyConstraint(p.Character)
-					p.CharacterAdded:Connect(applyConstraint)
-				end
-			end
-			Players.PlayerAdded:Connect(function(newPlayer)
-				newPlayer.CharacterAdded:Connect(function(newChar)
-					if isAntiFlingActive then applyConstraint(newChar) end
-				end)
-			end)
-		end
+		end)
 	end
 
 	local function setNoclipState(enable)
