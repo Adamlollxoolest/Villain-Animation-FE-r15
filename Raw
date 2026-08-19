@@ -21,7 +21,13 @@ local CFG = {
 	HeightBonusFactor = 0.05,    -- Extra duration added per stud of altitude
 	MaxGlideDuration = 10.0,     -- Cap for max glide duration
 	GlideFallSpeed = -5,         -- Float descent speed (gentle glide)
-	GlideForwardMultiplier = 1.2 -- Speed multiplier while gliding forward
+	GlideForwardMultiplier = 1.2, -- Speed multiplier while gliding forward
+
+	-- Execution & Trigger Automation Flags
+	AutoAntiFlingOnExec = false,
+	AutoSprintOnExec = false,
+	AutoGlideOnSprint = false,
+	AutoWallRunOnSprint = false
 }
 
 local ANIMATIONS = {
@@ -76,19 +82,57 @@ local function createMobileUI()
 	-- CFG Frame
 	local cfgFrame = Instance.new("Frame")
 	cfgFrame.Name = "CFGFrame"
-	cfgFrame.Size = UDim2.new(0, 220, 0, 200)
+	cfgFrame.Size = UDim2.new(0, 280, 0, 360)
 	cfgFrame.Position = UDim2.new(0, 160, 0, 20)
 	cfgFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 	cfgFrame.Visible = false
+	cfgFrame.Active = true
 	cfgFrame.Parent = screenGui
 	
 	local frameCorner = Instance.new("UICorner")
 	frameCorner.CornerRadius = UDim.new(0, 10)
 	frameCorner.Parent = cfgFrame
 
+	-- Dragging Logic for CFG Frame
+	local dragging = false
+	local dragInput = nil
+	local dragStart = nil
+	local startPos = nil
+
+	local function updateDrag(input)
+		local delta = input.Position - dragStart
+		cfgFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+
+	cfgFrame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = cfgFrame.Position
+
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+
+	cfgFrame.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			updateDrag(input)
+		end
+	end)
+
 	local function createCFGInput(labelText, defaultVal, posY, callback)
 		local label = Instance.new("TextLabel")
-		label.Size = UDim2.new(0, 120, 0, 30)
+		label.Size = UDim2.new(0, 170, 0, 30)
 		label.Position = UDim2.new(0, 10, 0, posY)
 		label.BackgroundTransparency = 1
 		label.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -99,8 +143,8 @@ local function createMobileUI()
 		label.Parent = cfgFrame
 
 		local box = Instance.new("TextBox")
-		box.Size = UDim2.new(0, 70, 0, 30)
-		box.Position = UDim2.new(0, 130, 0, posY)
+		box.Size = UDim2.new(0, 80, 0, 30)
+		box.Position = UDim2.new(0, 190, 0, posY)
 		box.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 		box.TextColor3 = Color3.fromRGB(255, 255, 255)
 		box.Text = tostring(defaultVal)
@@ -130,10 +174,72 @@ local function createMobileUI()
 		end)
 	end
 
-	createCFGInput("Sprint Speed:", CFG.SprintSpeed, 15, function(val) CFG.SprintSpeed = val end)
-	createCFGInput("Wall Speed:", CFG.WallRunSpeed, 55, function(val) CFG.WallRunSpeed = val end)
-	createCFGInput("Glide Base (s):", CFG.BaseGlideDuration, 95, function(val) CFG.BaseGlideDuration = val end)
-	createCFGInput("Glide Max (s):", CFG.MaxGlideDuration, 135, function(val) CFG.MaxGlideDuration = val end)
+	-- Custom Toggle/Slider UI Component for Auto-Settings
+	local function createCFGToggle(labelText, defaultState, posY, callback)
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(0, 190, 0, 30)
+		label.Position = UDim2.new(0, 10, 0, posY)
+		label.BackgroundTransparency = 1
+		label.TextColor3 = Color3.fromRGB(255, 255, 255)
+		label.Text = labelText
+		label.Font = Enum.Font.SourceSans
+		label.TextSize = 14
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.Parent = cfgFrame
+
+		local toggleBg = Instance.new("TextButton")
+		toggleBg.Size = UDim2.new(0, 60, 0, 26)
+		toggleBg.Position = UDim2.new(0, 200, 0, posY + 2)
+		toggleBg.BackgroundColor3 = defaultState and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(80, 80, 80)
+		toggleBg.Text = ""
+		toggleBg.Parent = cfgFrame
+
+		local bgCorner = Instance.new("UICorner")
+		bgCorner.CornerRadius = UDim.new(1, 0)
+		bgCorner.Parent = toggleBg
+
+		local sliderKnob = Instance.new("Frame")
+		sliderKnob.Size = UDim2.new(0, 22, 0, 22)
+		sliderKnob.Position = defaultState and UDim2.new(1, -24, 0, 2) or UDim2.new(0, 2, 0, 2)
+		sliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		sliderKnob.Parent = toggleBg
+
+		local knobCorner = Instance.new("UICorner")
+		knobCorner.CornerRadius = UDim.new(1, 0)
+		knobCorner.Parent = sliderKnob
+
+		local state = defaultState
+
+		toggleBg.MouseButton1Click:Connect(function()
+			state = not state
+			if state then
+				toggleBg.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+				sliderKnob.Position = UDim2.new(1, -24, 0, 2)
+			else
+				toggleBg.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+				sliderKnob.Position = UDim2.new(0, 2, 0, 2)
+			end
+			callback(state)
+		end)
+	end
+
+	-- Textbox Inputs
+	createCFGInput("Sprint Speed:", CFG.SprintSpeed, 10, function(val) CFG.SprintSpeed = val end)
+	createCFGInput("Jump Power:", CFG.JumpPower, 45, function(val) 
+		CFG.JumpPower = val
+		if player.Character and player.Character:FindFirstChild("Humanoid") then
+			player.Character.Humanoid.JumpPower = val
+		end
+	end)
+	createCFGInput("Wall Speed:", CFG.WallRunSpeed, 80, function(val) CFG.WallRunSpeed = val end)
+	createCFGInput("Glide Base (s):", CFG.BaseGlideDuration, 115, function(val) CFG.BaseGlideDuration = val end)
+	createCFGInput("Glide Max (s):", CFG.MaxGlideDuration, 150, function(val) CFG.MaxGlideDuration = val end)
+
+	-- Toggles / Sliders
+	createCFGToggle("Anti Fling (Exec On):", CFG.AutoAntiFlingOnExec, 190, function(state) CFG.AutoAntiFlingOnExec = state end)
+	createCFGToggle("Sprint (Exec On):", CFG.AutoSprintOnExec, 225, function(state) CFG.AutoSprintOnExec = state end)
+	createCFGToggle("Glide (On Sprint):", CFG.AutoGlideOnSprint, 260, function(state) CFG.AutoGlideOnSprint = state end)
+	createCFGToggle("Wall Run (On Sprint):", CFG.AutoWallRunOnSprint, 295, function(state) CFG.AutoWallRunOnSprint = state end)
 
 	cfgBtn.MouseButton1Click:Connect(function()
 		cfgFrame.Visible = not cfgFrame.Visible
@@ -213,7 +319,7 @@ local function setupCustomAnimations(character)
 	local antiFlingConn = nil
 	local renderConn = nil
 
-	-- Persistent Trail Objects to Prevent Resetting/Flicker
+	-- Persistent Trail Objects
 	local att0 = Instance.new("Attachment")
 	att0.Position = Vector3.new(0, 1, 0)
 	att0.Name = "GlideTrailAtt0"
@@ -313,7 +419,6 @@ local function setupCustomAnimations(character)
 		local rayResult = workspace:Raycast(rootPart.Position, Vector3.new(0, -500, 0), rayParams)
 		local groundHeight = rayResult and (rootPart.Position.Y - rayResult.Position.Y) or 0
 		
-		-- Dynamically read CFG values when calculating duration
 		calculatedGlideDuration = math.min(
 			CFG.BaseGlideDuration + (groundHeight * CFG.HeightBonusFactor), 
 			CFG.MaxGlideDuration
@@ -469,8 +574,26 @@ local function setupCustomAnimations(character)
 		humanoid.WalkSpeed = isSprinting and CFG.SprintSpeed or CFG.WalkSpeed
 		wallRunBtn.Visible = isSprinting
 		glideBtn.Visible = isSprinting
-		
-		if not isSprinting then
+
+		if isSprinting then
+			sprintBtn.Text = "Sprint: ON"
+			sprintBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+			
+			if CFG.AutoGlideOnSprint then
+				isGlideActive = true
+				glideBtn.Text = "Glide: ON"
+				glideBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+			end
+			
+			if CFG.AutoWallRunOnSprint then
+				isWallRunActive = true
+				wallRunBtn.Text = "Wall Run: ON"
+				wallRunBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+			end
+		else
+			sprintBtn.Text = "Sprint: OFF"
+			sprintBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+			
 			isWallRunActive = false
 			isWallRunning = false
 			isGlideActive = false
@@ -509,15 +632,7 @@ local function setupCustomAnimations(character)
 
 	-- Mobile Controls
 	sprintConn = sprintBtn.MouseButton1Click:Connect(function()
-		if isSprinting then
-			sprintBtn.Text = "Sprint: OFF"
-			sprintBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-			toggleSprint(false)
-		else
-			sprintBtn.Text = "Sprint: ON"
-			sprintBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
-			toggleSprint(true)
-		end
+		toggleSprint(not isSprinting)
 	end)
 
 	antiFlingBtnConn = antiFlingBtn.MouseButton1Click:Connect(function()
@@ -561,6 +676,17 @@ local function setupCustomAnimations(character)
 		end
 	end)
 
+	-- Initialize Execution-based Toggles
+	if CFG.AutoAntiFlingOnExec then
+		antiFlingBtn.Text = "Anti Fling: ON"
+		antiFlingBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+		setAntiFlingState(true)
+	end
+
+	if CFG.AutoSprintOnExec then
+		toggleSprint(true)
+	end
+
 	-- Render Loop
 	renderConn = RunService.RenderStepped:Connect(function()
 		updateWallRun()
@@ -576,7 +702,6 @@ local function setupCustomAnimations(character)
 				local moveVel = moveDir * (CFG.SprintSpeed * CFG.GlideForwardMultiplier)
 				linearVelocity.VectorVelocity = Vector3.new(moveVel.X, CFG.GlideFallSpeed, moveVel.Z)
 
-				-- Lock character orientation horizontal to avoid camera pitching glitch
 				if moveDir.Magnitude > 0.1 then
 					local flatLookVector = Vector3.new(moveDir.X, 0, moveDir.Z).Unit
 					rootPart.CFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + flatLookVector)
@@ -603,7 +728,6 @@ local function setupCustomAnimations(character)
 				end
 			end
 			
-			-- Trigger glide when falling begins or apex is hit
 			if isSprinting and isGlideActive and not isGliding and rootPart.AssemblyLinearVelocity.Y <= 2 then
 				startGliding()
 			end
