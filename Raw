@@ -3,7 +3,7 @@ local player = Players.LocalPlayer
 
 local ANIMATIONS = {
 	Idle = "rbxassetid://121480327509940",
-	Walk = "rbxassetid://118959209918644", -- Restored walk asset
+	Walk = "rbxassetid://118959209918644",
 	Run = "rbxassetid://83394429685133",   
 	Jump = "rbxassetid://656117878",
 	Fall = "rbxassetid://656115606",
