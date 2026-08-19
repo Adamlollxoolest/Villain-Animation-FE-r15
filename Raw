@@ -35,7 +35,7 @@ local CFG = {
 }
 
 local isNoclipActive = false
-local trackedShiftlockGuis = {} -- Stores only the shiftlock script's ScreenGuis
+local trackedShiftlockGuis = {}
 
 local function saveCFG()
 	if writefile then
@@ -70,13 +70,12 @@ local ANIMATIONS = {
 	SprintClimb = "rbxassetid://88763136693023",
 }
 
--- Shiftlock Execution & Safe Tracking Handler (Protects TouchGui / Jump Button / Joystick)
+-- Shiftlock State & Targeted Destruction Handler
 local function setShiftlockState(state)
 	CFG.Shiftlock = state
 	saveCFG()
 	
 	if state then
-		-- Listen strictly for new ScreenGuis added by the external script, ignoring Roblox system GUIs
 		local connection
 		connection = playerGui.ChildAdded:Connect(function(child)
 			if child:IsA("ScreenGui") and child.Name ~= "MobileControlGui" and child.Name ~= "TouchGui" then
@@ -92,7 +91,7 @@ local function setShiftlockState(state)
 			if connection then connection:Disconnect() end
 		end)
 	else
-		-- Destroy only the tracked shiftlock GUIs
+		-- Destroys the tracked GUIs spawned by the external script
 		for _, gui in ipairs(trackedShiftlockGuis) do
 			if gui and gui.Parent then
 				pcall(function() gui:Destroy() end)
@@ -100,7 +99,7 @@ local function setShiftlockState(state)
 		end
 		trackedShiftlockGuis = {}
 
-		-- Fallback sweep strictly for shiftlock-related UI names (never touching TouchGui)
+		-- Safety sweep for leftover INF-HH UI elements while strictly ignoring Roblox TouchGui/Joystick
 		pcall(function()
 			for _, gui in ipairs(playerGui:GetChildren()) do
 				if gui.Name ~= "MobileControlGui" and gui.Name ~= "TouchGui" then
