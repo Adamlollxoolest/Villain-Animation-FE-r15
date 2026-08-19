@@ -1,128 +1,426 @@
 local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
 local ANIMATIONS = {
 	Idle = "rbxassetid://121480327509940",
-	Walk = "rbxassetid://118959209918644",
-	Run = "rbxassetid://83394429685133",   
-	Jump = "rbxassetid://656117878",
-	Fall = "rbxassetid://656115606",
-	Climb = "rbxassetid://656114359",
+	Walk = "rbxassetid://118959209918644",         -- Normal walk / Mahoraga Walk
+	Run = "rbxassetid://83394429685133",           -- Super sprint (235 speed)
+	NormalJump = "rbxassetid://656117878",         -- Ninja Jump (Sprint OFF)
+	SprintJump = "rbxassetid://87628280298366",     -- Custom Jump (Sprint ON)
+	NormalFall = "rbxassetid://656115606",         -- Ninja Fall (Sprint OFF)
+	SprintFall = "rbxassetid://81030893339218",     -- Custom Fall (Sprint ON)
+	NormalClimb = "rbxassetid://656114359",        -- Ninja Climb (Sprint OFF)
+	SprintClimb = "rbxassetid://88763136693023",    -- Custom Climb & Wall Run Animation
 }
+
+local WALK_SPEED = 16
+local SPRINT_SPEED = 235
+local JUMP_POWER = 80
+local WALL_RUN_CLIMB_SPEED = 200
+
+-- Mobile UI Setup (Positioned North-West / Top-Left)
+local function createMobileUI()
+	local existingGui = playerGui:FindFirstChild("MobileControlGui")
+	if existingGui then existingGui:Destroy() end
+
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "MobileControlGui"
+	screenGui.ResetOnSpawn = false
+	screenGui.Parent = playerGui
+
+	local function makeButton(name, text, position, color)
+		local button = Instance.new("TextButton")
+		button.Name = name
+		button.Size = UDim2.new(0, 130, 0, 50)
+		button.Position = position
+		button.BackgroundColor3 = color
+		button.TextColor3 = Color3.fromRGB(255, 255, 255)
+		button.TextScaled = true
+		button.Font = Enum.Font.SourceSansBold
+		button.Text = text
+		button.Active = true
+		button.Draggable = true
+		button.Parent = screenGui
+
+		local uiCorner = Instance.new("UICorner")
+		uiCorner.CornerRadius = UDim.new(0, 12)
+		uiCorner.Parent = button
+
+		return button
+	end
+
+	local sprintBtn = makeButton("SprintButton", "Sprint: OFF", UDim2.new(0, 20, 0, 20), Color3.fromRGB(220, 50, 50))
+	local antiFlingBtn = makeButton("AntiFlingButton", "Anti Fling: OFF", UDim2.new(0, 20, 0, 80), Color3.fromRGB(220, 50, 50))
+	local wallRunBtn = makeButton("WallRunButton", "Wall Run: OFF", UDim2.new(0, 20, 0, 140), Color3.fromRGB(220, 50, 50))
+	
+	-- Hide Wall Run button by default until Sprint is toggled ON
+	wallRunBtn.Visible = false
+
+	return sprintBtn, antiFlingBtn, wallRunBtn
+end
 
 local function setupCustomAnimations(character)
 	local humanoid = character:WaitForChild("Humanoid")
+	local rootPart = character:WaitForChild("HumanoidRootPart")
 	local animator = humanoid:WaitForChild("Animator")
 
-	-- Set stats
-	local lockedSpeed = 43
-	local lockedJumpPower = 80
+	local defaultAnimateScript = character:FindFirstChild("Animate")
+	if defaultAnimateScript then
+		defaultAnimateScript.Disabled = true
+	end
 
-	humanoid.WalkSpeed = lockedSpeed
+	humanoid.WalkSpeed = WALK_SPEED
 	humanoid.UseJumpPower = true
-	humanoid.JumpPower = lockedJumpPower
-
-	humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(function()
-		if humanoid.WalkSpeed ~= lockedSpeed then
-			humanoid.WalkSpeed = lockedSpeed
-		end
-	end)
+	humanoid.JumpPower = JUMP_POWER
 
 	humanoid:GetPropertyChangedSignal("JumpPower"):Connect(function()
-		if humanoid.JumpPower ~= lockedJumpPower then
-			humanoid.JumpPower = lockedJumpPower
+		if humanoid.JumpPower ~= JUMP_POWER then
+			humanoid.JumpPower = JUMP_POWER
 		end
 	end)
 
-	-- Anti-Fling
-	for _, part in ipairs(character:GetDescendants()) do
-		if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
-			part.CanCollide = false
-		end
-	end
-	
-	character.DescendantAdded:Connect(function(descendant)
-		if descendant:IsA("BasePart") and descendant.Name ~= "HumanoidRootPart" then
-			descendant.CanCollide = false
-		end
-	end)
-
-	local function loadAnimation(assetId, priority, looped)
+	local function loadAnimation(name, assetId, priority, looped)
 		local anim = Instance.new("Animation")
 		anim.AnimationId = assetId
-		local track = animator:LoadAnimation(anim)
+		
+		local success, track = pcall(function()
+			return animator:LoadAnimation(anim)
+		end)
+		
+		if not success or not track then
+			warn("[Animation Error] Failed to load '" .. name .. "' (" .. assetId .. ").")
+			return nil, anim
+		end
+
 		track.Priority = priority or Enum.AnimationPriority.Action
 		track.Looped = looped ~= nil and looped or false
 		return track, anim
 	end
 
-	local idleTrack, idleAnim = loadAnimation(ANIMATIONS.Idle, Enum.AnimationPriority.Idle, true)
-	local walkTrack, walkAnim = loadAnimation(ANIMATIONS.Walk, Enum.AnimationPriority.Action, true)
-	local runTrack, runAnim = loadAnimation(ANIMATIONS.Run, Enum.AnimationPriority.Action, true)
-	local jumpTrack, jumpAnim = loadAnimation(ANIMATIONS.Jump, Enum.AnimationPriority.Action3, true)
-	local fallTrack, fallAnim = loadAnimation(ANIMATIONS.Fall, Enum.AnimationPriority.Action3, true)
-	local climbTrack, climbAnim = loadAnimation(ANIMATIONS.Climb, Enum.AnimationPriority.Action3, true)
+	local idleTrack, idleAnim = loadAnimation("Idle", ANIMATIONS.Idle, Enum.AnimationPriority.Idle, true)
+	local walkTrack, walkAnim = loadAnimation("Walk", ANIMATIONS.Walk, Enum.AnimationPriority.Action2, true)
+	local runTrack, runAnim = loadAnimation("Run", ANIMATIONS.Run, Enum.AnimationPriority.Action4, true)
+	
+	local normalJumpTrack, normalJumpAnim = loadAnimation("NormalJump", ANIMATIONS.NormalJump, Enum.AnimationPriority.Action4, false)
+	local sprintJumpTrack, sprintJumpAnim = loadAnimation("SprintJump", ANIMATIONS.SprintJump, Enum.AnimationPriority.Action4, false)
+	local normalFallTrack, normalFallAnim = loadAnimation("NormalFall", ANIMATIONS.NormalFall, Enum.AnimationPriority.Action4, true)
+	local sprintFallTrack, sprintFallAnim = loadAnimation("SprintFall", ANIMATIONS.SprintFall, Enum.AnimationPriority.Action4, true)
+	
+	local normalClimbTrack, normalClimbAnim = loadAnimation("NormalClimb", ANIMATIONS.NormalClimb, Enum.AnimationPriority.Action3, true)
+	local sprintClimbTrack, sprintClimbAnim = loadAnimation("SprintClimb", ANIMATIONS.SprintClimb, Enum.AnimationPriority.Action4, true)
 
 	local isJumping = false
 	local isFalling = false
 	local isClimbing = false
+	local isSprinting = false
+	local isWallRunning = false
+	local isWallRunActive = false
+	local isAntiFlingActive = false
+	
+	local antiFlingConn = nil
+	local renderConn = nil
+
+	local function playSafe(track)
+		if track then
+			track.TimePosition = 0
+			if not track.IsPlaying then
+				track:Play()
+			end
+		end
+	end
+
+	local function stopSafe(track)
+		if track and track.IsPlaying then
+			track:Stop()
+		end
+	end
 
 	local function stopAllMovement()
-		walkTrack:Stop()
-		runTrack:Stop()
+		stopSafe(walkTrack)
+		stopSafe(runTrack)
+	end
+
+	local function stopAirAnimations()
+		stopSafe(normalJumpTrack)
+		stopSafe(sprintJumpTrack)
+		stopSafe(normalFallTrack)
+		stopSafe(sprintFallTrack)
+	end
+
+	local function stopClimbAnimations()
+		stopSafe(normalClimbTrack)
+		stopSafe(sprintClimbTrack)
 	end
 
 	local function stopAll()
-		idleTrack:Stop()
+		stopSafe(idleTrack)
 		stopAllMovement()
-		jumpTrack:Stop()
-		fallTrack:Stop()
-		climbTrack:Stop()
+		stopAirAnimations()
+		stopClimbAnimations()
+		
+		for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
+			if track ~= idleTrack and track ~= walkTrack and track ~= runTrack 
+			   and track ~= normalJumpTrack and track ~= sprintJumpTrack 
+			   and track ~= normalFallTrack and track ~= sprintFallTrack 
+			   and track ~= normalClimbTrack and track ~= sprintClimbTrack then
+				track:Stop()
+			end
+		end
 	end
 
-	-- Dynamically sync animation playback speed and switch between Walk and Run
-	humanoid.Running:Connect(function(speed)
-		if isJumping or isFalling or isClimbing then return end
+	local function applySafetyBrake()
+		if rootPart then
+			rootPart.AssemblyLinearVelocity = Vector3.new(0, rootPart.AssemblyLinearVelocity.Y, 0)
+		end
+	end
 
-		if speed > 0.5 then
-			idleTrack:Stop()
+	local function setAntiFlingState(enable)
+		isAntiFlingActive = enable
+		
+		if antiFlingConn then
+			antiFlingConn:Disconnect()
+			antiFlingConn = nil
+		end
+
+		if isAntiFlingActive then
+			antiFlingConn = RunService.Stepped:Connect(function()
+				for _, part in ipairs(character:GetDescendants()) do
+					if part:IsA("BasePart") then
+						part.CanCollide = false
+					end
+				end
+			end)
+		else
+			for _, part in ipairs(character:GetDescendants()) do
+				if part:IsA("BasePart") then
+					if part.Name == "HumanoidRootPart" or part.Name == "Torso" or part.Name == "UpperTorso" or part.Name == "LowerTorso" then
+						part.CanCollide = true
+					else
+						part.CanCollide = false
+					end
+				end
+			end
+		end
+	end
+
+	local function updateMovementAnimation()
+		if isJumping or isFalling or isClimbing or isWallRunning then return end
+
+		if humanoid.MoveDirection.Magnitude > 0.05 then
+			stopSafe(idleTrack)
 			
-			-- Scale playback speed directly relative to actual movement velocity
-			local playSpeed = math.max(0.1, speed / 16)
-
-			-- Use current speed (not max WalkSpeed) to differentiate walking vs running
-			if speed > 20 then
-				if walkTrack.IsPlaying then walkTrack:Stop() end
-				if not runTrack.IsPlaying then
-					runTrack:Play()
+			if isSprinting then
+				stopSafe(walkTrack)
+				if runTrack then
+					if not runTrack.IsPlaying then
+						runTrack.TimePosition = 0
+						runTrack:Play()
+					end
+					runTrack:AdjustSpeed(2.5)
 				end
-				runTrack:AdjustSpeed(playSpeed)
 			else
-				if runTrack.IsPlaying then runTrack:Stop() end
-				if not walkTrack.IsPlaying then
-					walkTrack:Play()
+				stopSafe(runTrack)
+				if walkTrack then
+					if not walkTrack.IsPlaying then
+						walkTrack.TimePosition = 0
+						walkTrack:Play()
+					end
+					walkTrack:AdjustSpeed(1)
 				end
-				walkTrack:AdjustSpeed(playSpeed)
 			end
 		else
 			stopAllMovement()
-			if not idleTrack.IsPlaying then
-				idleTrack:Play()
+			applySafetyBrake()
+			playSafe(idleTrack)
+		end
+	end
+
+	-- Raycast Wall Run Logic
+	local function updateWallRun()
+		if not isSprinting or not isWallRunActive then
+			if isWallRunning then
+				isWallRunning = false
+				humanoid.WalkSpeed = isSprinting and SPRINT_SPEED or WALK_SPEED
+				stopClimbAnimations()
+				updateMovementAnimation()
+			end
+			return
+		end
+
+		local rayParams = RaycastParams.new()
+		rayParams.FilterDescendantsInstances = {character}
+		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+		local lookVector = rootPart.CFrame.LookVector
+		local rayResult = workspace:Raycast(rootPart.Position, lookVector * 3.5, rayParams)
+
+		if rayResult and rayResult.Instance and rayResult.Instance.CanCollide then
+			-- Confirming wall contact
+			if math.abs(rayResult.Normal.Y) < 0.3 then
+				if not isWallRunning then
+					isWallRunning = true
+					isJumping = false
+					isFalling = false
+					
+					stopSafe(idleTrack)
+					stopAllMovement()
+					stopAirAnimations()
+					stopSafe(normalClimbTrack)
+
+					if sprintClimbTrack then
+						sprintClimbTrack.TimePosition = 0
+						sprintClimbTrack:Play()
+					end
+				end
+
+				-- If player is pushing input, climb upward at 200 speed and animate
+				if humanoid.MoveDirection.Magnitude > 0.05 then
+					rootPart.AssemblyLinearVelocity = Vector3.new(0, WALL_RUN_CLIMB_SPEED, 0)
+					if sprintClimbTrack then
+						sprintClimbTrack:AdjustSpeed(2.5)
+					end
+				else
+					-- Hold in place and freeze animation when stationary
+					rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+					if sprintClimbTrack then
+						sprintClimbTrack:AdjustSpeed(0)
+					end
+				end
+				return
+			end
+		end
+
+		-- Clean exit when leaving wall
+		if isWallRunning then
+			isWallRunning = false
+			humanoid.WalkSpeed = isSprinting and SPRINT_SPEED or WALK_SPEED
+			stopClimbAnimations()
+			updateMovementAnimation()
+		end
+	end
+
+	local sprintBtn, antiFlingBtn, wallRunBtn = createMobileUI()
+	local sprintConn, antiFlingBtnConn, wallRunBtnConn
+
+	local function toggleSprint(enable)
+		isSprinting = enable
+		humanoid.WalkSpeed = isSprinting and SPRINT_SPEED or WALK_SPEED
+		wallRunBtn.Visible = isSprinting
+		
+		if not isSprinting then
+			isWallRunActive = false
+			isWallRunning = false
+			wallRunBtn.Text = "Wall Run: OFF"
+			wallRunBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+			stopClimbAnimations()
+		end
+		
+		stopAllMovement()
+		updateMovementAnimation()
+	end
+
+	humanoid:GetPropertyChangedSignal("MoveDirection"):Connect(function()
+		updateMovementAnimation()
+	end)
+
+	-- PC Inputs
+	local inputBeganConn = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+		if input.KeyCode == Enum.KeyCode.LeftShift then
+			toggleSprint(true)
+		end
+	end)
+
+	local inputEndedConn = UserInputService.InputEnded:Connect(function(input)
+		if input.KeyCode == Enum.KeyCode.LeftShift then
+			toggleSprint(false)
+		end
+	end)
+
+	-- Mobile Controls
+	sprintConn = sprintBtn.MouseButton1Click:Connect(function()
+		if isSprinting then
+			sprintBtn.Text = "Sprint: OFF"
+			sprintBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+			toggleSprint(false)
+		else
+			sprintBtn.Text = "Sprint: ON"
+			sprintBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+			toggleSprint(true)
+		end
+	end)
+
+	antiFlingBtnConn = antiFlingBtn.MouseButton1Click:Connect(function()
+		if isAntiFlingActive then
+			antiFlingBtn.Text = "Anti Fling: OFF"
+			antiFlingBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+			setAntiFlingState(false)
+		else
+			antiFlingBtn.Text = "Anti Fling: ON"
+			antiFlingBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+			setAntiFlingState(true)
+		end
+	end)
+
+	wallRunBtnConn = wallRunBtn.MouseButton1Click:Connect(function()
+		if isWallRunActive then
+			isWallRunActive = false
+			isWallRunning = false
+			humanoid.WalkSpeed = isSprinting and SPRINT_SPEED or WALK_SPEED
+			wallRunBtn.Text = "Wall Run: OFF"
+			wallRunBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+			stopClimbAnimations()
+			updateMovementAnimation()
+		else
+			isWallRunActive = true
+			wallRunBtn.Text = "Wall Run: ON"
+			wallRunBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+		end
+	end)
+
+	-- Render Loop
+	renderConn = RunService.RenderStepped:Connect(function()
+		updateWallRun()
+
+		if isWallRunning then return end
+
+		local state = humanoid:GetState()
+		if state == Enum.HumanoidStateType.Freefall and not isClimbing then
+			if not isFalling then
+				isFalling = true
+				isJumping = false
+				stopSafe(idleTrack)
+				stopAllMovement()
+				stopSafe(normalJumpTrack)
+				stopSafe(sprintJumpTrack)
+
+				if isSprinting then
+					stopSafe(normalFallTrack)
+					playSafe(sprintFallTrack)
+				else
+					stopSafe(sprintFallTrack)
+					playSafe(normalFallTrack)
+				end
 			end
 		end
 	end)
 
+	-- Standard Climbing
 	humanoid.Climbing:Connect(function(climbSpeed)
-		if isClimbing then
+		if isClimbing and not isWallRunning then
+			local activeTrack = isSprinting and sprintClimbTrack or normalClimbTrack
+			local inactiveTrack = isSprinting and normalClimbTrack or sprintClimbTrack
+			
+			stopSafe(inactiveTrack)
+			
 			if climbSpeed > 0.1 then
-				if not climbTrack.IsPlaying then
-					climbTrack:Play()
-				end
-				climbTrack:AdjustSpeed(1)
+				playSafe(activeTrack)
+				if activeTrack then activeTrack:AdjustSpeed(1) end
 			else
-				if climbTrack.IsPlaying then
-					climbTrack:AdjustSpeed(0)
-				end
+				if activeTrack and activeTrack.IsPlaying then activeTrack:AdjustSpeed(0) end
 			end
 		end
 	end)
@@ -132,75 +430,76 @@ local function setupCustomAnimations(character)
 			isJumping = true
 			isFalling = false
 			isClimbing = false
-			stopAll()
-			jumpTrack:Play()
+			isWallRunning = false
+			
+			stopSafe(idleTrack)
+			stopAllMovement()
+			stopClimbAnimations()
+			stopSafe(normalFallTrack)
+			stopSafe(sprintFallTrack)
 
-		elseif newState == Enum.HumanoidStateType.Freefall then
-			isJumping = false
-			isFalling = true
-			isClimbing = false
-			stopAll()
-			fallTrack:Play()
+			if isSprinting then
+				stopSafe(normalJumpTrack)
+				playSafe(sprintJumpTrack)
+			else
+				stopSafe(sprintJumpTrack)
+				playSafe(normalJumpTrack)
+			end
 
 		elseif newState == Enum.HumanoidStateType.Landed then
-			if isFalling or isJumping then
-				isJumping = false
-				isFalling = false
-				isClimbing = false
-				stopAll()
-				
-				local currentSpeed = humanoid.RootPart and humanoid.RootPart.AssemblyLinearVelocity.Magnitude or 0
-				if humanoid.MoveDirection.Magnitude > 0 then
-					if currentSpeed > 20 then
-						runTrack:Play()
-						runTrack:AdjustSpeed(currentSpeed / 16)
-					else
-						walkTrack:Play()
-						walkTrack:AdjustSpeed(currentSpeed / 16)
-					end
-				else
-					idleTrack:Play()
-				end
-			end
+			isJumping = false
+			isFalling = false
+			isClimbing = false
+			isWallRunning = false
+			stopAirAnimations()
+			stopClimbAnimations()
+			updateMovementAnimation()
 
 		elseif newState == Enum.HumanoidStateType.Climbing then
 			isClimbing = true
 			isJumping = false
 			isFalling = false
-			stopAll()
-			climbTrack:Play()
-			climbTrack:AdjustSpeed(1)
+			stopSafe(idleTrack)
+			stopAllMovement()
+			stopAirAnimations()
+			
+			if isSprinting then
+				stopSafe(normalClimbTrack)
+				playSafe(sprintClimbTrack)
+				if sprintClimbTrack then sprintClimbTrack:AdjustSpeed(1) end
+			else
+				stopSafe(sprintClimbTrack)
+				playSafe(normalClimbTrack)
+				if normalClimbTrack then normalClimbTrack:AdjustSpeed(1) end
+			end
 
 		elseif oldState == Enum.HumanoidStateType.Climbing then
 			isClimbing = false
-			climbTrack:AdjustSpeed(1)
-			climbTrack:Stop()
-			
-			local currentSpeed = humanoid.RootPart and humanoid.RootPart.AssemblyLinearVelocity.Magnitude or 0
-			if humanoid.MoveDirection.Magnitude > 0 then
-				if currentSpeed > 20 then
-					runTrack:Play()
-					runTrack:AdjustSpeed(currentSpeed / 16)
-				else
-					walkTrack:Play()
-					walkTrack:AdjustSpeed(currentSpeed / 16)
-				end
-			else
-				idleTrack:Play()
-			end
+			stopClimbAnimations()
+			updateMovementAnimation()
 		end
 	end)
 
-	idleTrack:Play()
+	playSafe(idleTrack)
 
 	humanoid.Died:Connect(function()
 		stopAll()
+		setAntiFlingState(false)
+		if renderConn then renderConn:Disconnect() end
+		if inputBeganConn then inputBeganConn:Disconnect() end
+		if inputEndedConn then inputEndedConn:Disconnect() end
+		if sprintConn then sprintConn:Disconnect() end
+		if antiFlingBtnConn then antiFlingBtnConn:Disconnect() end
+		if wallRunBtnConn then wallRunBtnConn:Disconnect() end
 		idleAnim:Destroy()
 		walkAnim:Destroy()
 		runAnim:Destroy()
-		jumpAnim:Destroy()
-		fallAnim:Destroy()
-		climbAnim:Destroy()
+		normalJumpAnim:Destroy()
+		sprintJumpAnim:Destroy()
+		normalFallAnim:Destroy()
+		sprintFallAnim:Destroy()
+		normalClimbAnim:Destroy()
+		sprintClimbAnim:Destroy()
 	end)
 end
 
