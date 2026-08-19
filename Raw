@@ -35,7 +35,7 @@ local CFG = {
 }
 
 local isNoclipActive = false
-local trackedShiftlockItems = {} -- Stores every UI element/button created during shiftlock execution
+local trackedShiftlockGuis = {} -- Stores only the shiftlock script's ScreenGuis
 
 local function saveCFG()
 	if writefile then
@@ -70,17 +70,17 @@ local ANIMATIONS = {
 	SprintClimb = "rbxassetid://88763136693023",
 }
 
--- Shiftlock Execution & Deep Tracking Cleanup Handler
+-- Shiftlock Execution & Safe Tracking Handler (Protects TouchGui / Jump Button / Joystick)
 local function setShiftlockState(state)
 	CFG.Shiftlock = state
 	saveCFG()
 	
 	if state then
-		-- Listen for any new UI components or buttons added to PlayerGui during execution
+		-- Listen strictly for new ScreenGuis added by the external script, ignoring Roblox system GUIs
 		local connection
-		connection = playerGui.DescendantAdded:Connect(function(descendant)
-			if descendant ~= playerGui and not descendant:IsDescendantOf(playerGui:FindFirstChild("MobileControlGui")) then
-				table.insert(trackedShiftlockItems, descendant)
+		connection = playerGui.ChildAdded:Connect(function(child)
+			if child:IsA("ScreenGui") and child.Name ~= "MobileControlGui" and child.Name ~= "TouchGui" then
+				table.insert(trackedShiftlockGuis, child)
 			end
 		end)
 
@@ -92,20 +92,20 @@ local function setShiftlockState(state)
 			if connection then connection:Disconnect() end
 		end)
 	else
-		-- Destroy all tracked UI elements/buttons created by the script
-		for _, item in ipairs(trackedShiftlockItems) do
-			if item and item.Parent then
-				pcall(function() item:Destroy() end)
+		-- Destroy only the tracked shiftlock GUIs
+		for _, gui in ipairs(trackedShiftlockGuis) do
+			if gui and gui.Parent then
+				pcall(function() gui:Destroy() end)
 			end
 		end
-		trackedShiftlockItems = {}
+		trackedShiftlockGuis = {}
 
-		-- Comprehensive sweep for any remaining Shiftlock GUI or button instances in PlayerGui
+		-- Fallback sweep strictly for shiftlock-related UI names (never touching TouchGui)
 		pcall(function()
 			for _, gui in ipairs(playerGui:GetChildren()) do
-				if gui.Name ~= "MobileControlGui" then
+				if gui.Name ~= "MobileControlGui" and gui.Name ~= "TouchGui" then
 					local nameLower = string.lower(gui.Name)
-					if nameLower:find("shift") or nameLower:find("lock") or nameLower:find("inf") or nameLower:find("hh") or nameLower:find("gui") then
+					if nameLower:find("shift") or nameLower:find("lock") or nameLower:find("inf") or nameLower:find("hh") then
 						gui:Destroy()
 					end
 				end
