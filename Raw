@@ -34,11 +34,9 @@ local CFG = {
 	Shiftlock = false
 }
 
--- Global toggle states & tracking for Shiftlock script
 local isNoclipActive = false
-local shiftlockScriptInstance = nil
+local trackedShiftlockGuis = {} -- Stores exact GUI instances created by the shiftlock script
 
--- Save & Load Helpers
 local function saveCFG()
 	if writefile then
 		pcall(function()
@@ -72,22 +70,41 @@ local ANIMATIONS = {
 	SprintClimb = "rbxassetid://88763136693023",
 }
 
--- Shiftlock Execution & Cleanup Handler
+-- Shiftlock Execution & Precise Tracking Cleanup Handler
 local function setShiftlockState(state)
 	CFG.Shiftlock = state
 	saveCFG()
 	
 	if state then
+		-- Listen for new GUIs added during execution
+		local connection
+		connection = playerGui.ChildAdded:Connect(function(child)
+			if child:IsA("ScreenGui") and child.Name ~= "MobileControlGui" then
+				table.insert(trackedShiftlockGuis, child)
+			end
+		end)
+
 		pcall(function()
-			-- Execute the INF-HH script
 			loadstring(game:HttpGet("https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script"))()
 		end)
+
+		task.delay(1, function()
+			if connection then connection:Disconnect() end
+		end)
 	else
-		-- Cleanup logic: scans PlayerGui and CoreGui (where accessible) for elements created by the shiftlock script
+		-- Destroy all tracked shiftlock GUIs
+		for _, gui in ipairs(trackedShiftlockGuis) do
+			if gui and gui.Parent then
+				gui:Destroy()
+			end
+		end
+		trackedShiftlockGuis = {}
+
+		-- Fallback keyword scan cleanup
 		pcall(function()
 			for _, gui in ipairs(playerGui:GetChildren()) do
 				local nameLower = string.lower(gui.Name)
-				if nameLower:find("shift") or nameLower:find("lock") or nameLower:find("inf") or nameLower:find("hh") then
+				if gui.Name ~= "MobileControlGui" and (nameLower:find("shift") or nameLower:find("lock") or nameLower:find("inf") or nameLower:find("hh")) then
 					gui:Destroy()
 				end
 			end
@@ -132,7 +149,6 @@ local function createMobileUI(setNoclipStateCallback)
 	local glideBtn = makeButton("GlideButton", "Glide: OFF", UDim2.new(0, 20, 0, 170), Color3.fromRGB(220, 50, 50))
 	local cfgBtn = makeButton("CFGButton", "CFG Menu", UDim2.new(0, 20, 0, 220), Color3.fromRGB(100, 100, 100))
 	
-	-- CFG Frame (Sized to accommodate all options cleanly)
 	local cfgFrame = Instance.new("Frame")
 	cfgFrame.Name = "CFGFrame"
 	cfgFrame.Size = UDim2.new(0, 280, 0, 465)
@@ -292,11 +308,7 @@ local function createMobileUI(setNoclipStateCallback)
 	createCFGToggle("Sprint (Exec On):", CFG.AutoSprintOnExec, 260, function(state) CFG.AutoSprintOnExec = state end)
 	createCFGToggle("Glide (On Sprint):", CFG.AutoGlideOnSprint, 295, function(state) CFG.AutoGlideOnSprint = state end)
 	createCFGToggle("Wall Run (On Sprint):", CFG.AutoWallRunOnSprint, 330, function(state) CFG.AutoWallRunOnSprint = state end)
-	
-	-- Explicitly added Shiftlock toggle switch / slider button
-	createCFGToggle("Shiftlock:", CFG.Shiftlock, 365, function(state) 
-		setShiftlockState(state) 
-	end)
+	createCFGToggle("Shiftlock:", CFG.Shiftlock, 365, function(state) setShiftlockState(state) end)
 
 	cfgBtn.MouseButton1Click:Connect(function()
 		cfgFrame.Visible = not cfgFrame.Visible
