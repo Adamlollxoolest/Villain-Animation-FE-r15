@@ -35,7 +35,7 @@ local CFG = {
 }
 
 local isNoclipActive = false
-local trackedShiftlockGuis = {} -- Stores exact GUI instances created by the shiftlock script
+local trackedShiftlockItems = {} -- Stores every UI element/button created during shiftlock execution
 
 local function saveCFG()
 	if writefile then
@@ -70,17 +70,17 @@ local ANIMATIONS = {
 	SprintClimb = "rbxassetid://88763136693023",
 }
 
--- Shiftlock Execution & Precise Tracking Cleanup Handler
+-- Shiftlock Execution & Deep Tracking Cleanup Handler
 local function setShiftlockState(state)
 	CFG.Shiftlock = state
 	saveCFG()
 	
 	if state then
-		-- Listen for new GUIs added during execution
+		-- Listen for any new UI components or buttons added to PlayerGui during execution
 		local connection
-		connection = playerGui.ChildAdded:Connect(function(child)
-			if child:IsA("ScreenGui") and child.Name ~= "MobileControlGui" then
-				table.insert(trackedShiftlockGuis, child)
+		connection = playerGui.DescendantAdded:Connect(function(descendant)
+			if descendant ~= playerGui and not descendant:IsDescendantOf(playerGui:FindFirstChild("MobileControlGui")) then
+				table.insert(trackedShiftlockItems, descendant)
 			end
 		end)
 
@@ -88,24 +88,26 @@ local function setShiftlockState(state)
 			loadstring(game:HttpGet("https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script"))()
 		end)
 
-		task.delay(1, function()
+		task.delay(1.5, function()
 			if connection then connection:Disconnect() end
 		end)
 	else
-		-- Destroy all tracked shiftlock GUIs
-		for _, gui in ipairs(trackedShiftlockGuis) do
-			if gui and gui.Parent then
-				gui:Destroy()
+		-- Destroy all tracked UI elements/buttons created by the script
+		for _, item in ipairs(trackedShiftlockItems) do
+			if item and item.Parent then
+				pcall(function() item:Destroy() end)
 			end
 		end
-		trackedShiftlockGuis = {}
+		trackedShiftlockItems = {}
 
-		-- Fallback keyword scan cleanup
+		-- Comprehensive sweep for any remaining Shiftlock GUI or button instances in PlayerGui
 		pcall(function()
 			for _, gui in ipairs(playerGui:GetChildren()) do
-				local nameLower = string.lower(gui.Name)
-				if gui.Name ~= "MobileControlGui" and (nameLower:find("shift") or nameLower:find("lock") or nameLower:find("inf") or nameLower:find("hh")) then
-					gui:Destroy()
+				if gui.Name ~= "MobileControlGui" then
+					local nameLower = string.lower(gui.Name)
+					if nameLower:find("shift") or nameLower:find("lock") or nameLower:find("inf") or nameLower:find("hh") or nameLower:find("gui") then
+						gui:Destroy()
+					end
 				end
 			end
 		end)
