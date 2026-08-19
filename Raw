@@ -248,7 +248,8 @@ local function createMobileUI(setNoclipStateCallback)
 		end
 
 		toggleBg.MouseButton1Click:Connect(function()
-			setUIState(not state)
+			state = not state
+			setUIState(state)
 			callback(state)
 			saveCFG()
 		end)
@@ -268,7 +269,7 @@ local function createMobileUI(setNoclipStateCallback)
 	createCFGInput("Glide Base (s):", CFG.BaseGlideDuration, 115, function(val) CFG.BaseGlideDuration = val end)
 	createCFGInput("Glide Max (s):", CFG.MaxGlideDuration, 150, function(val) CFG.MaxGlideDuration = val end)
 
-	-- Toggles / Sliders Inside CFG
+	-- Toggles Inside CFG
 	local setNoclipUI = createCFGToggle("Noclip Toggle:", CFG.AutoNoclipOnExec, 190, function(state)
 		CFG.AutoNoclipOnExec = state
 		setNoclipStateCallback(state)
@@ -568,7 +569,7 @@ local function setupCustomAnimations(character)
 		end
 	end)
 
-	-- Render Loop
+	-- Render Loop for Movement & Animations
 	renderConn = RunService.RenderStepped:Connect(function()
 		-- Wall run logic
 		if isSprinting and isWallRunActive then
@@ -610,7 +611,27 @@ local function setupCustomAnimations(character)
 			end
 		end
 
+		-- Ground Movement and Animation Handling
 		local state = humanoid:GetState()
+		if state ~= Enum.HumanoidStateType.Freefall and state ~= Enum.HumanoidStateType.Jumping and not isWallRunning then
+			isFalling = false
+			isJumping = false
+			
+			if humanoid.MoveDirection.Magnitude > 0.1 then
+				stopSafe(idleTrack)
+				if isSprinting then
+					stopSafe(walkTrack)
+					playSafe(runTrack)
+				else
+					stopSafe(runTrack)
+					playSafe(walkTrack)
+				end
+			else
+				stopAllMovement()
+				playSafe(idleTrack)
+			end
+		end
+
 		if state == Enum.HumanoidStateType.Freefall and not isClimbing then
 			if not isFalling then
 				isFalling = true
