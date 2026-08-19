@@ -30,11 +30,13 @@ local CFG = {
 	AutoSprintOnExec = false,
 	AutoNoclipOnExec = false,
 	AutoGlideOnSprint = false,
-	AutoWallRunOnSprint = false
+	AutoWallRunOnSprint = false,
+	Shiftlock = false
 }
 
--- Global toggle states
+-- Global toggle states & tracking for Shiftlock script
 local isNoclipActive = false
+local shiftlockScriptInstance = nil
 
 -- Save & Load Helpers
 local function saveCFG()
@@ -69,6 +71,28 @@ local ANIMATIONS = {
 	NormalClimb = "rbxassetid://656114359",
 	SprintClimb = "rbxassetid://88763136693023",
 }
+
+-- Shiftlock Execution Handler
+local function setShiftlockState(state)
+	CFG.Shiftlock = state
+	saveCFG()
+	
+	if state then
+		pcall(function()
+			-- Execute the INF-HH shiftlock script
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script"))()
+		end)
+	else
+		-- Cleanup logic: removes any common shiftlock GUI or child added by external scripts
+		pcall(function()
+			for _, gui in ipairs(playerGui:GetChildren()) do
+				if string.lower(gui.Name):find("shift") or string.lower(gui.Name):find("lock") or string.lower(gui.Name):find("inf") then
+					gui:Destroy()
+				end
+			end
+		end)
+	end
+end
 
 -- Mobile UI Setup
 local function createMobileUI(setNoclipStateCallback)
@@ -107,10 +131,10 @@ local function createMobileUI(setNoclipStateCallback)
 	local glideBtn = makeButton("GlideButton", "Glide: OFF", UDim2.new(0, 20, 0, 170), Color3.fromRGB(220, 50, 50))
 	local cfgBtn = makeButton("CFGButton", "CFG Menu", UDim2.new(0, 20, 0, 220), Color3.fromRGB(100, 100, 100))
 	
-	-- CFG Frame
+	-- CFG Frame (Increased height to fit new Shiftlock control)
 	local cfgFrame = Instance.new("Frame")
 	cfgFrame.Name = "CFGFrame"
-	cfgFrame.Size = UDim2.new(0, 280, 0, 420)
+	cfgFrame.Size = UDim2.new(0, 280, 0, 465)
 	cfgFrame.Position = UDim2.new(0, 160, 0, 20)
 	cfgFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 	cfgFrame.Visible = false
@@ -267,6 +291,7 @@ local function createMobileUI(setNoclipStateCallback)
 	createCFGToggle("Sprint (Exec On):", CFG.AutoSprintOnExec, 260, function(state) CFG.AutoSprintOnExec = state end)
 	createCFGToggle("Glide (On Sprint):", CFG.AutoGlideOnSprint, 295, function(state) CFG.AutoGlideOnSprint = state end)
 	createCFGToggle("Wall Run (On Sprint):", CFG.AutoWallRunOnSprint, 330, function(state) CFG.AutoWallRunOnSprint = state end)
+	createCFGToggle("Shiftlock:", CFG.Shiftlock, 365, function(state) setShiftlockState(state) end)
 
 	cfgBtn.MouseButton1Click:Connect(function()
 		cfgFrame.Visible = not cfgFrame.Visible
@@ -282,7 +307,6 @@ local function setupCustomAnimations(character)
 	local humanoid = character:WaitForChild("Humanoid")
 	local rootPart = character:WaitForChild("HumanoidRootPart")
 	
-	-- Completely remove/disable default animate scripts so they don't override your tracks
 	for _, child in ipairs(character:GetChildren()) do
 		if child:IsA("LocalScript") and (child.Name == "Animate" or child.Name == "AnimationScript") then
 			child.Disabled = true
@@ -294,7 +318,6 @@ local function setupCustomAnimations(character)
 	humanoid.UseJumpPower = true
 	humanoid.JumpPower = CFG.JumpPower
 
-	-- Wait briefly for animator replication to prevent zero-weight freezing
 	task.wait(0.2)
 	local animator = humanoid:WaitForChild("Animator")
 
@@ -342,7 +365,6 @@ local function setupCustomAnimations(character)
 	local noclipConn, renderConn, antiFlingConn = nil, nil, nil
 	local currentMovementTrack = nil
 
-	-- Persistent Trail Objects
 	local att0 = Instance.new("Attachment")
 	att0.Position = Vector3.new(0, 1, 0)
 	att0.Parent = rootPart
@@ -362,7 +384,6 @@ local function setupCustomAnimations(character)
 	persistentTrail.Enabled = false
 	persistentTrail.Parent = rootPart
 
-	-- Smooth transition handler for movement/idle tracks
 	local function playMovementTrack(track)
 		if not track then return end
 		if currentMovementTrack == track then
@@ -429,7 +450,6 @@ local function setupCustomAnimations(character)
 		persistentTrail.Enabled = true
 	end
 
-	-- Bulletproof Anti-Fling: Disables collision against all other players while keeping walls/floors fully solid
 	local function setAntiFlingState(enable)
 		isAntiFlingActive = enable
 		if antiFlingConn then antiFlingConn:Disconnect(); antiFlingConn = nil end
@@ -549,9 +569,9 @@ local function setupCustomAnimations(character)
 		end
 		if CFG.AutoSprintOnExec then toggleSprint(true) end
 		if CFG.AutoNoclipOnExec then setNoclipState(true) end
+		if CFG.Shiftlock then setShiftlockState(true) end
 	end)
 
-	-- Render Loop for Movement & Animations
 	renderConn = RunService.RenderStepped:Connect(function()
 		if isSprinting and isWallRunActive then
 			local rayParams = RaycastParams.new()
@@ -590,13 +610,11 @@ local function setupCustomAnimations(character)
 			end
 		end
 
-		-- Anti-slide safety stop: When player stops moving while grounded, kill horizontal momentum instantly
 		local state = humanoid:GetState()
 		if humanoid.MoveDirection.Magnitude <= 0.1 and not isGliding and (state == Enum.HumanoidStateType.Running or state == Enum.HumanoidStateType.RunningNoPhysics) then
 			rootPart.AssemblyLinearVelocity = Vector3.new(0, rootPart.AssemblyLinearVelocity.Y, 0)
 		end
 
-		-- State Handling & Animation Playback
 		if state ~= Enum.HumanoidStateType.Freefall and state ~= Enum.HumanoidStateType.Jumping and not isWallRunning then
 			isFalling = false
 			isJumping = false
