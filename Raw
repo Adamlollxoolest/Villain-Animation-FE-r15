@@ -3,6 +3,7 @@ local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
+local PhysicsService = game:GetService("PhysicsService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -429,22 +430,38 @@ local function setupCustomAnimations(character)
 		persistentTrail.Enabled = true
 	end
 
+	-- Anti-Fling: Disables collision strictly between you and other players using NoCollisionConstraint
+	local antiFlingConstraints = {}
 	local function setAntiFlingState(enable)
 		isAntiFlingActive = enable
-		if antiFlingConn then antiFlingConn:Disconnect(); antiFlingConn = nil end
+		for _, constraint in ipairs(antiFlingConstraints) do
+			if constraint then constraint:Destroy() end
+		end
+		antiFlingConstraints = {}
 
 		if isAntiFlingActive then
-			antiFlingConn = RunService.Stepped:Connect(function()
-				if character and rootPart then
-					for _, otherPlayer in ipairs(Players:GetPlayers()) do
-						if otherPlayer ~= player and otherPlayer.Character then
-							local otherRoot = otherPlayer.Character:FindFirstChild("HumanoidRootPart")
-							if otherRoot and (otherRoot.Position - rootPart.Position).Magnitude < 5 then
-								rootPart.AssemblyLinearVelocity = Vector3.new(0, rootPart.AssemblyLinearVelocity.Y, 0)
-							end
-						end
-					end
+			local function applyConstraint(otherChar)
+				if not otherChar or otherChar == character then return end
+				local otherRoot = otherChar:FindFirstChild("HumanoidRootPart")
+				if otherRoot and rootPart then
+					local constraint = Instance.new("NoCollisionConstraint")
+					constraint.Part0 = rootPart
+					constraint.Part1 = otherRoot
+					constraint.Parent = character
+					table.insert(antiFlingConstraints, constraint)
 				end
+			end
+
+			for _, p in ipairs(Players:GetPlayers()) do
+				if p ~= player and p.Character then
+					applyConstraint(p.Character)
+					p.CharacterAdded:Connect(applyConstraint)
+				end
+			end
+			Players.PlayerAdded:Connect(function(newPlayer)
+				newPlayer.CharacterAdded:Connect(function(newChar)
+					if isAntiFlingActive then applyConstraint(newChar) end
+				end)
 			end)
 		end
 	end
