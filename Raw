@@ -36,7 +36,7 @@ local CFG = {
 -- Global toggle states
 local isNoclipActive = false
 
--- Save & Load Helpers (Executor File I/O Compatibility)
+-- Save & Load Helpers
 local function saveCFG()
 	if writefile then
 		pcall(function()
@@ -121,7 +121,6 @@ local function createMobileUI(setNoclipStateCallback)
 	frameCorner.CornerRadius = UDim.new(0, 10)
 	frameCorner.Parent = cfgFrame
 
-	-- Dragging Logic
 	local dragging, dragInput, dragStart, startPos
 
 	local function updateDrag(input)
@@ -293,9 +292,12 @@ local function setupCustomAnimations(character)
 	local rootPart = character:WaitForChild("HumanoidRootPart")
 	local animator = humanoid:WaitForChild("Animator")
 
-	local defaultAnimateScript = character:FindFirstChild("Animate")
-	if defaultAnimateScript then
-		defaultAnimateScript.Disabled = true
+	-- Completely remove/disable default animate scripts so they don't override your tracks
+	for _, child in ipairs(character:GetChildren()) do
+		if child:IsA("LocalScript") and (child.Name == "Animate" or child.Name == "AnimationScript") then
+			child.Disabled = true
+			child:Destroy()
+		end
 	end
 
 	humanoid.WalkSpeed = CFG.WalkSpeed
@@ -320,20 +322,22 @@ local function setupCustomAnimations(character)
 
 		track.Priority = priority or Enum.AnimationPriority.Action
 		track.Looped = looped ~= nil and looped or false
+		track:AdjustWeight(1)
+		track:AdjustSpeed(1)
 		return track
 	end
 
 	local idleTrack = loadAnimation(ANIMATIONS.Idle, Enum.AnimationPriority.Idle, true)
-	local walkTrack = loadAnimation(ANIMATIONS.Walk, Enum.AnimationPriority.Action2, true)
-	local runTrack = loadAnimation(ANIMATIONS.Run, Enum.AnimationPriority.Action4, true)
+	local walkTrack = loadAnimation(ANIMATIONS.Walk, Enum.AnimationPriority.Movement, true)
+	local runTrack = loadAnimation(ANIMATIONS.Run, Enum.AnimationPriority.Movement, true)
 	
-	local normalJumpTrack = loadAnimation(ANIMATIONS.NormalJump, Enum.AnimationPriority.Action4, false)
-	local sprintJumpTrack = loadAnimation(ANIMATIONS.SprintJump, Enum.AnimationPriority.Action4, false)
-	local normalFallTrack = loadAnimation(ANIMATIONS.NormalFall, Enum.AnimationPriority.Action4, true)
-	local sprintFallTrack = loadAnimation(ANIMATIONS.SprintFall, Enum.AnimationPriority.Action4, true)
+	local normalJumpTrack = loadAnimation(ANIMATIONS.NormalJump, Enum.AnimationPriority.Action, false)
+	local sprintJumpTrack = loadAnimation(ANIMATIONS.SprintJump, Enum.AnimationPriority.Action, false)
+	local normalFallTrack = loadAnimation(ANIMATIONS.NormalFall, Enum.AnimationPriority.Action, true)
+	local sprintFallTrack = loadAnimation(ANIMATIONS.SprintFall, Enum.AnimationPriority.Action, true)
 	
-	local normalClimbTrack = loadAnimation(ANIMATIONS.NormalClimb, Enum.AnimationPriority.Action3, true)
-	local sprintClimbTrack = loadAnimation(ANIMATIONS.SprintClimb, Enum.AnimationPriority.Action4, true)
+	local normalClimbTrack = loadAnimation(ANIMATIONS.NormalClimb, Enum.AnimationPriority.Action, true)
+	local sprintClimbTrack = loadAnimation(ANIMATIONS.SprintClimb, Enum.AnimationPriority.Action, true)
 
 	local isFalling, isJumping, isSprinting = false, false, false
 	local isWallRunning, isWallRunActive, isGlideActive, isGliding, isAntiFlingActive = false, false, false, false, false
@@ -342,7 +346,7 @@ local function setupCustomAnimations(character)
 	local calculatedGlideDuration = CFG.BaseGlideDuration
 	local linearVelocity, glideAttachment = nil, nil
 	local antiFlingConn, noclipConn, renderConn = nil, nil
-	local currentAnimTrack = nil
+	local currentMovementTrack = nil
 
 	-- Persistent Trail Objects
 	local att0 = Instance.new("Attachment")
@@ -364,29 +368,22 @@ local function setupCustomAnimations(character)
 	persistentTrail.Enabled = false
 	persistentTrail.Parent = rootPart
 
-	-- Fixed safe playback function that doesn't spam time resets
-	local function playAnimation(track)
+	-- Smooth transition handler for movement/idle tracks to prevent freezing
+	local function playMovementTrack(track)
 		if not track then return end
-		if currentAnimTrack == track then
+		if currentMovementTrack == track then
 			if not track.IsPlaying then track:Play(0.1) end
 			return
 		end
-		
-		if currentAnimTrack and currentAnimTrack.IsPlaying then
-			currentAnimTrack:Stop(0.1)
+
+		if currentMovementTrack and currentMovementTrack.IsPlaying then
+			currentMovementTrack:Stop(0.1)
 		end
-		
-		currentAnimTrack = track
+
+		currentMovementTrack = track
 		if not track.IsPlaying then
 			track:Play(0.1)
 		end
-	end
-
-	local function stopAllMovement()
-		if walkTrack and walkTrack.IsPlaying then walkTrack:Stop(0.1) end
-		if runTrack and runTrack.IsPlaying then runTrack:Stop(0.1) end
-		if idleTrack and idleTrack.IsPlaying then idleTrack:Stop(0.1) end
-		currentAnimTrack = nil
 	end
 
 	local function stopAirAnimations()
@@ -599,7 +596,7 @@ local function setupCustomAnimations(character)
 			end
 		end
 
-		-- Ground Movement & Loop-Friendly Animation Switcher
+		-- State Handling & Animation Playback
 		local state = humanoid:GetState()
 		if state ~= Enum.HumanoidStateType.Freefall and state ~= Enum.HumanoidStateType.Jumping and not isWallRunning then
 			isFalling = false
@@ -607,12 +604,12 @@ local function setupCustomAnimations(character)
 			
 			if humanoid.MoveDirection.Magnitude > 0.1 then
 				if isSprinting then
-					playAnimation(runTrack)
+					playMovementTrack(runTrack)
 				else
-					playAnimation(walkTrack)
+					playMovementTrack(walkTrack)
 				end
 			else
-				playAnimation(idleTrack)
+				playMovementTrack(idleTrack)
 			end
 		end
 
@@ -647,10 +644,9 @@ local function setupCustomAnimations(character)
 		end
 	end)
 
-	playAnimation(idleTrack)
+	playMovementTrack(idleTrack)
 
 	humanoid.Died:Connect(function()
-		stopAllMovement()
 		stopGliding()
 		setAntiFlingState(false)
 		setNoclipState(false)
