@@ -72,21 +72,22 @@ local ANIMATIONS = {
 	SprintClimb = "rbxassetid://88763136693023",
 }
 
--- Shiftlock Execution Handler
+-- Shiftlock Execution & Cleanup Handler
 local function setShiftlockState(state)
 	CFG.Shiftlock = state
 	saveCFG()
 	
 	if state then
 		pcall(function()
-			-- Execute the INF-HH shiftlock script
+			-- Execute the INF-HH script
 			loadstring(game:HttpGet("https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script"))()
 		end)
 	else
-		-- Cleanup logic: removes any common shiftlock GUI or child added by external scripts
+		-- Cleanup logic: scans PlayerGui and CoreGui (where accessible) for elements created by the shiftlock script
 		pcall(function()
 			for _, gui in ipairs(playerGui:GetChildren()) do
-				if string.lower(gui.Name):find("shift") or string.lower(gui.Name):find("lock") or string.lower(gui.Name):find("inf") then
+				local nameLower = string.lower(gui.Name)
+				if nameLower:find("shift") or nameLower:find("lock") or nameLower:find("inf") or nameLower:find("hh") then
 					gui:Destroy()
 				end
 			end
@@ -131,7 +132,7 @@ local function createMobileUI(setNoclipStateCallback)
 	local glideBtn = makeButton("GlideButton", "Glide: OFF", UDim2.new(0, 20, 0, 170), Color3.fromRGB(220, 50, 50))
 	local cfgBtn = makeButton("CFGButton", "CFG Menu", UDim2.new(0, 20, 0, 220), Color3.fromRGB(100, 100, 100))
 	
-	-- CFG Frame (Increased height to fit new Shiftlock control)
+	-- CFG Frame (Sized to accommodate all options cleanly)
 	local cfgFrame = Instance.new("Frame")
 	cfgFrame.Name = "CFGFrame"
 	cfgFrame.Size = UDim2.new(0, 280, 0, 465)
@@ -291,7 +292,11 @@ local function createMobileUI(setNoclipStateCallback)
 	createCFGToggle("Sprint (Exec On):", CFG.AutoSprintOnExec, 260, function(state) CFG.AutoSprintOnExec = state end)
 	createCFGToggle("Glide (On Sprint):", CFG.AutoGlideOnSprint, 295, function(state) CFG.AutoGlideOnSprint = state end)
 	createCFGToggle("Wall Run (On Sprint):", CFG.AutoWallRunOnSprint, 330, function(state) CFG.AutoWallRunOnSprint = state end)
-	createCFGToggle("Shiftlock:", CFG.Shiftlock, 365, function(state) setShiftlockState(state) end)
+	
+	-- Explicitly added Shiftlock toggle switch / slider button
+	createCFGToggle("Shiftlock:", CFG.Shiftlock, 365, function(state) 
+		setShiftlockState(state) 
+	end)
 
 	cfgBtn.MouseButton1Click:Connect(function()
 		cfgFrame.Visible = not cfgFrame.Visible
