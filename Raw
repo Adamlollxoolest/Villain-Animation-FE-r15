@@ -180,22 +180,13 @@ local function createMobileUI(setNoclipStateCallback)
 		boxCorner.CornerRadius = UDim.new(0, 6)
 		boxCorner.Parent = box
 
-		local function updateValue()
+		box.FocusLost:Connect(function()
 			local num = tonumber(box.Text)
 			if num then
 				callback(num)
 				saveCFG()
 			else
 				box.Text = tostring(defaultVal)
-			end
-		end
-
-		box.FocusLost:Connect(updateValue)
-		box:GetPropertyChangedSignal("Text"):Connect(function()
-			local num = tonumber(box.Text)
-			if num then
-				callback(num)
-				saveCFG()
 			end
 		end)
 	end
@@ -290,8 +281,7 @@ end
 local function setupCustomAnimations(character)
 	local humanoid = character:WaitForChild("Humanoid")
 	local rootPart = character:WaitForChild("HumanoidRootPart")
-	local animator = humanoid:WaitForChild("Animator")
-
+	
 	-- Completely remove/disable default animate scripts so they don't override your tracks
 	for _, child in ipairs(character:GetChildren()) do
 		if child:IsA("LocalScript") and (child.Name == "Animate" or child.Name == "AnimationScript") then
@@ -303,6 +293,10 @@ local function setupCustomAnimations(character)
 	humanoid.WalkSpeed = CFG.WalkSpeed
 	humanoid.UseJumpPower = true
 	humanoid.JumpPower = CFG.JumpPower
+
+	-- Wait briefly for animator replication to prevent zero-weight freezing
+	task.wait(0.2)
+	local animator = humanoid:WaitForChild("Animator")
 
 	humanoid:GetPropertyChangedSignal("JumpPower"):Connect(function()
 		if humanoid.JumpPower ~= CFG.JumpPower then
@@ -368,7 +362,7 @@ local function setupCustomAnimations(character)
 	persistentTrail.Enabled = false
 	persistentTrail.Parent = rootPart
 
-	-- Smooth transition handler for movement/idle tracks to prevent freezing
+	-- Smooth transition handler for movement/idle tracks
 	local function playMovementTrack(track)
 		if not track then return end
 		if currentMovementTrack == track then
@@ -596,8 +590,13 @@ local function setupCustomAnimations(character)
 			end
 		end
 
-		-- State Handling & Animation Playback
+		-- Anti-slide safety stop: When player stops moving while grounded, kill horizontal momentum instantly
 		local state = humanoid:GetState()
+		if humanoid.MoveDirection.Magnitude <= 0.1 and not isGliding and (state == Enum.HumanoidStateType.Running or state == Enum.HumanoidStateType.RunningNoPhysics) then
+			rootPart.AssemblyLinearVelocity = Vector3.new(0, rootPart.AssemblyLinearVelocity.Y, 0)
+		end
+
+		-- State Handling & Animation Playback
 		if state ~= Enum.HumanoidStateType.Freefall and state ~= Enum.HumanoidStateType.Jumping and not isWallRunning then
 			isFalling = false
 			isJumping = false
