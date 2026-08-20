@@ -685,6 +685,7 @@ local function setupCustomAnimations(character)
 	local isFalling, isJumping, isSprinting = false, false, false
 	local isWallRunning, isWallRunActive, isGlideActive, isGliding, isAntiFlingActive = false, false, false, false, false
 	local isWalkOnWaterActive, isWalkingOnWater = false, false
+	local waterJumpCooldown = 0 -- Grace period to ensure jumping off water works
 	
 	local glideStartTime = 0
 	local calculatedGlideDuration = CFG.BaseGlideDuration
@@ -876,6 +877,20 @@ local function setupCustomAnimations(character)
 	UserInputService.InputBegan:Connect(function(input, gpe)
 		if gpe then return end
 		if input.KeyCode == Enum.KeyCode.LeftShift then toggleSprint(true) end
+		if input.KeyCode == Enum.KeyCode.Space then
+			if isWalkingOnWater then
+				waterJumpCooldown = tick() + 0.35 -- Allow jump freedom off water for 350ms
+				isWalkingOnWater = false
+				isJumping = true
+				isFalling = false
+				stopAirAnimations()
+				if isSprinting then
+					if sprintJumpTrack then sprintJumpTrack:Play() end
+				else
+					if normalJumpTrack then normalJumpTrack:Play() end
+				end
+			end
+		end
 		if input.KeyCode == Enum.KeyCode.N then
 			local newState = not isNoclipActive
 			setNoclipState(newState)
@@ -963,7 +978,7 @@ local function setupCustomAnimations(character)
 			stopClimbAnimations()
 		end
 
-		if isSprinting and isWalkOnWaterActive then
+		if isSprinting and isWalkOnWaterActive and tick() > waterJumpCooldown then
 			local rayParams = RaycastParams.new()
 			rayParams.FilterDescendantsInstances = {character}
 			rayParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -1006,7 +1021,8 @@ local function setupCustomAnimations(character)
 			rootPart.AssemblyLinearVelocity = Vector3.new(0, rootPart.AssemblyLinearVelocity.Y, 0)
 		end
 
-		if state ~= Enum.HumanoidStateType.Freefall and state ~= Enum.HumanoidStateType.Jumping and not isWallRunning and not isWalkingOnWater then
+		-- Handle normal ground + water walking animations
+		if (state ~= Enum.HumanoidStateType.Freefall and state ~= Enum.HumanoidStateType.Jumping and not isWallRunning) or isWalkingOnWater then
 			isFalling = false
 			isJumping = false
 			
@@ -1040,7 +1056,8 @@ local function setupCustomAnimations(character)
 
 	humanoid.StateChanged:Connect(function(oldState, newState)
 		if newState == Enum.HumanoidStateType.Jumping then
-			isJumping = true; isFalling = false; stopGliding()
+			isJumping = true; isFalling = false; stopGliding(); isWalkingOnWater = false
+			waterJumpCooldown = tick() + 0.35
 			stopAirAnimations()
 			if isSprinting then
 				if sprintJumpTrack then sprintJumpTrack:Play() end
