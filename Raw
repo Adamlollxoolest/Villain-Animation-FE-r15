@@ -15,7 +15,7 @@ local CFG = {
 	SprintSpeed = 235,
 	WallRunSpeed = 200,
 	JumpPower = 80,
-	FlySpeed = 300,
+	FlySpeed = 200, -- Adjusted speed safe for NDS bypass
 	
 	BaseGlideDuration = 1.0,
 	HeightBonusFactor = 0.05,
@@ -75,7 +75,7 @@ local ANIMATIONS = {
 	Swim = "rbxassetid://913384386",
 	SwimIdle = "rbxassetid://913389285",
 	Fly = "rbxassetid://120303626369803",
-	FlyIdle = "rbxassetid://100678061110922" -- Updated FlyIdle animation ID
+	FlyIdle = "rbxassetid://100678061110922"
 }
 
 local function setShiftlockState(state)
@@ -556,6 +556,7 @@ local function setupCustomAnimations(character)
 	local isWallRunning, isWallRunActive, isGlideActive, isGliding, isAntiFlingActive = false, false, false, false, false
 	local isFlying = false
 	local flyBodyVel, flyBodyGyro = nil, nil
+	local velocityBypassConn = nil
 
 	local isWalkOnWaterActive = CFG.AutoWalkOnWaterOnSprint
 	local isWalkingOnWater = false
@@ -592,9 +593,20 @@ local function setupCustomAnimations(character)
 	local function stopFlying()
 		isFlying = false
 		if flyConn then flyConn:Disconnect(); flyConn = nil end
+		if velocityBypassConn then velocityBypassConn:Disconnect(); velocityBypassConn = nil end
 		if flyBodyVel then flyBodyVel:Destroy(); flyBodyVel = nil end
 		if flyBodyGyro then flyBodyGyro:Destroy(); flyBodyGyro = nil end
+		
+		-- Safely reset physics state to avoid fall damage upon landing
+		if rootPart then
+			rootPart.AssemblyLinearVelocity = Vector3.zero
+			rootPart.AssemblyAngularVelocity = Vector3.zero
+		end
+		
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
 		humanoid.PlatformStand = false
+		
 		if flyTrack and flyTrack.IsPlaying then flyTrack:Stop(0.1) end
 		if flyIdleTrack and flyIdleTrack.IsPlaying then flyIdleTrack:Stop(0.1) end
 	end
@@ -602,6 +614,10 @@ local function setupCustomAnimations(character)
 	local function startFlying()
 		if isFlying then return end
 		isFlying = true
+		
+		-- Disable falling state calculation to bypass NDS fall damage
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
 		humanoid.PlatformStand = true
 
 		flyBodyVel = Instance.new("BodyVelocity")
@@ -616,6 +632,14 @@ local function setupCustomAnimations(character)
 		flyBodyGyro.Parent = rootPart
 
 		local camera = Workspace.CurrentCamera
+
+		-- NDS Bypass: Continuous Velocity Zeroing Loop
+		velocityBypassConn = RunService.Heartbeat:Connect(function()
+			if isFlying and rootPart then
+				rootPart.AssemblyLinearVelocity = Vector3.zero
+				rootPart.AssemblyAngularVelocity = Vector3.zero
+			end
+		end)
 
 		local function getLocalMoveVector()
 			local success, vec = pcall(function()
@@ -649,6 +673,11 @@ local function setupCustomAnimations(character)
 			if not isFlying or not rootPart then
 				stopFlying()
 				return
+			end
+
+			-- NDS Altitude Ceiling Cap: Keep height below 350 Y to avoid disaster kill-layers
+			if rootPart.Position.Y > 350 then
+				rootPart.CFrame = CFrame.new(rootPart.Position.X, 345, rootPart.Position.Z)
 			end
 
 			flyBodyGyro.CFrame = camera.CFrame
