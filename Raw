@@ -15,6 +15,7 @@ local CFG = {
 	SprintSpeed = 235,
 	WallRunSpeed = 200,
 	JumpPower = 80,
+	FlySpeed = 300,
 	
 	BaseGlideDuration = 1.0,
 	HeightBonusFactor = 0.05,
@@ -72,7 +73,9 @@ local ANIMATIONS = {
 	NormalClimb = "rbxassetid://656114359",
 	SprintClimb = "rbxassetid://88763136693023",
 	Swim = "rbxassetid://913384386",
-	SwimIdle = "rbxassetid://913389285"
+	SwimIdle = "rbxassetid://913389285",
+	Fly = "rbxassetid://120303626369803",
+	FlyIdle = "rbxassetid://100678061110922" -- Updated FlyIdle animation ID
 }
 
 local function setShiftlockState(state)
@@ -102,12 +105,42 @@ local function setShiftlockState(state)
 			end
 		end)
 	else
+		pcall(function()
+			player.DevEnableMouseLock = false
+			player.CameraMode = Enum.CameraMode.Classic
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			UserInputService.MouseIconEnabled = true
+			
+			local playerScripts = player:FindFirstChild("PlayerScripts")
+			if playerScripts then
+				local playerModule = playerScripts:FindFirstChild("PlayerModule")
+				if playerModule then
+					playerModule.Disabled = true
+					task.wait(0.1)
+					playerModule.Disabled = false
+				end
+			end
+		end)
+
 		for _, item in ipairs(trackedINFHHItems) do
 			if item and item.Parent then
 				pcall(function() item:Destroy() end)
 			end
 		end
 		trackedINFHHItems = {}
+
+		local function deepClean(parent)
+			for _, child in ipairs(parent:GetChildren()) do
+				local nameLower = string.lower(child.Name)
+				if string.find(nameLower, "shiftlock") or string.find(nameLower, "mouselock") or string.find(nameLower, "cursor") then
+					pcall(function() child:Destroy() end)
+				else
+					deepClean(child)
+				end
+			end
+		end
+		pcall(function() deepClean(playerGui) end)
+		pcall(function() deepClean(CoreGui) end)
 	end
 end
 
@@ -180,13 +213,14 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 
 	local sprintBtn = makeButton("SprintButton", "Sprint: OFF", UDim2.new(0, 20, 0, 20), Color3.fromRGB(220, 50, 50))
 	local antiFlingBtn = makeButton("AntiFlingButton", "Anti Fling: OFF", UDim2.new(0, 20, 0, 70), Color3.fromRGB(220, 50, 50))
-	local wallRunBtn = makeButton("WallRunButton", "Wall Run: OFF", UDim2.new(0, 20, 0, 120), Color3.fromRGB(220, 50, 50))
-	local glideBtn = makeButton("GlideButton", "Glide: OFF", UDim2.new(0, 20, 0, 170), Color3.fromRGB(220, 50, 50))
-	local cfgBtn = makeButton("CFGButton", "CFG Menu", UDim2.new(0, 20, 0, 220), Color3.fromRGB(100, 100, 100))
+	local flyBtn = makeButton("FlyButton", "Fly: OFF", UDim2.new(0, 20, 0, 120), Color3.fromRGB(220, 50, 50))
+	local wallRunBtn = makeButton("WallRunButton", "Wall Run: OFF", UDim2.new(0, 20, 0, 170), Color3.fromRGB(220, 50, 50))
+	local glideBtn = makeButton("GlideButton", "Glide: OFF", UDim2.new(0, 20, 0, 220), Color3.fromRGB(220, 50, 50))
+	local cfgBtn = makeButton("CFGButton", "CFG Menu", UDim2.new(0, 20, 0, 270), Color3.fromRGB(100, 100, 100))
 	
 	local cfgFrame = Instance.new("Frame")
 	cfgFrame.Name = "CFGFrame"
-	cfgFrame.Size = UDim2.new(0, 280, 0, 535)
+	cfgFrame.Size = UDim2.new(0, 280, 0, 570)
 	cfgFrame.Position = UDim2.new(0, 160, 0, 20)
 	cfgFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 	cfgFrame.Visible = false
@@ -301,13 +335,13 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 		CFG.SprintSpeed = val 
 		if updateSpeedCallback then updateSpeedCallback() end
 	end)
-	createCFGInput("Jump Power:", CFG.JumpPower, 45, function(val) 
+	createCFGInput("Flyspeed:", CFG.FlySpeed, 45, function(val) CFG.FlySpeed = val end)
+	createCFGInput("Jump Power:", CFG.JumpPower, 80, function(val) 
 		CFG.JumpPower = val 
 		if updateJumpCallback then updateJumpCallback() end
 	end)
-	createCFGInput("Wall Speed:", CFG.WallRunSpeed, 80, function(val) CFG.WallRunSpeed = val end)
-	createCFGInput("Glide Base (s):", CFG.BaseGlideDuration, 115, function(val) CFG.BaseGlideDuration = val end)
-	createCFGInput("Glide Max (s):", CFG.MaxGlideDuration, 150, function(val) CFG.MaxGlideDuration = val end)
+	createCFGInput("Wall Speed:", CFG.WallRunSpeed, 115, function(val) CFG.WallRunSpeed = val end)
+	createCFGInput("Glide Base (s):", CFG.BaseGlideDuration, 150, function(val) CFG.BaseGlideDuration = val end)
 	createCFGInput("Water Offset:", CFG.WalkOnWaterHeightOffset, 185, function(val) CFG.WalkOnWaterHeightOffset = val end)
 
 	local setNoclipUI = createCFGToggle("Noclip Toggle:", CFG.AutoNoclipOnExec, 225, function(state)
@@ -442,13 +476,13 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 
 	local colorTrailMenuBtn = Instance.new("TextButton")
 	colorTrailMenuBtn.Size = UDim2.new(0, 260, 0, 32)
-	colorTrailMenuBtn.Position = UDim2.new(0, 10, 0, 485)
+	colorTrailMenuBtn.Position = UDim2.new(0, 10, 0, 520)
 	colorTrailMenuBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
 	colorTrailMenuBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	colorTrailMenuBtn.Text = "Color Trail Settings"
 	colorTrailMenuBtn.Font = Enum.Font.SourceSansBold
 	colorTrailMenuBtn.TextSize = 14
-	colorTrailMenuBtn.Parent = colorTrailFrame
+	colorTrailMenuBtn.Parent = cfgFrame
 
 	colorTrailMenuBtn.MouseButton1Click:Connect(function()
 		colorTrailFrame.Visible = not colorTrailFrame.Visible
@@ -461,7 +495,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 	wallRunBtn.Visible = false
 	glideBtn.Visible = false
 
-	return sprintBtn, antiFlingBtn, wallRunBtn, glideBtn, setNoclipUI
+	return sprintBtn, antiFlingBtn, flyBtn, wallRunBtn, glideBtn, setNoclipUI
 end
 
 local function setupCustomAnimations(character)
@@ -507,17 +541,22 @@ local function setupCustomAnimations(character)
 	local sprintClimbTrack = loadAnimation(ANIMATIONS.SprintClimb, Enum.AnimationPriority.Action, true)
 	local swimTrack = loadAnimation(ANIMATIONS.Swim, Enum.AnimationPriority.Action, true)
 	local swimIdleTrack = loadAnimation(ANIMATIONS.SwimIdle, Enum.AnimationPriority.Action, true)
+	local flyTrack = loadAnimation(ANIMATIONS.Fly, Enum.AnimationPriority.Action4, true)
+	local flyIdleTrack = loadAnimation(ANIMATIONS.FlyIdle, Enum.AnimationPriority.Action4, true)
 
 	local allAnimationTracks = {
 		idleTrack, walkTrack, runTrack,
 		normalJumpTrack, sprintJumpTrack,
 		normalFallTrack, sprintFallTrack,
 		normalClimbTrack, sprintClimbTrack,
-		swimTrack, swimIdleTrack
+		swimTrack, swimIdleTrack, flyTrack, flyIdleTrack
 	}
 
 	local isFalling, isJumping, isSprinting = false, false, false
 	local isWallRunning, isWallRunActive, isGlideActive, isGliding, isAntiFlingActive = false, false, false, false, false
+	local isFlying = false
+	local flyBodyVel, flyBodyGyro = nil, nil
+
 	local isWalkOnWaterActive = CFG.AutoWalkOnWaterOnSprint
 	local isWalkingOnWater = false
 	local waterJumpCooldown = 0 
@@ -525,10 +564,113 @@ local function setupCustomAnimations(character)
 	local glideStartTime = 0
 	local calculatedGlideDuration = CFG.BaseGlideDuration
 	local linearVelocity, glideAttachment = nil, nil
-	local noclipConn, renderConn, antiFlingConn, speedLockConn, jumpReqConn = nil, nil, nil, nil, nil
+	local noclipConn, renderConn, antiFlingConn, speedLockConn, jumpReqConn, flyConn = nil, nil, nil, nil, nil, nil
 	local currentMovementTrack = nil
 
 	local waterPlatform = nil
+
+	local function stopAllAnimationsExcept(targetTrack)
+		for _, track in ipairs(allAnimationTracks) do
+			if track and track ~= targetTrack and track.IsPlaying then
+				track:Stop(0.1)
+			end
+		end
+	end
+
+	local function playMovementTrack(track, fadeTime)
+		if not track then return end
+		fadeTime = fadeTime or 0.1
+		stopAllAnimationsExcept(track)
+		if currentMovementTrack == track then
+			if not track.IsPlaying then track:Play(fadeTime) end
+			return
+		end
+		currentMovementTrack = track
+		if not track.IsPlaying then track:Play(fadeTime) end
+	end
+
+	local function stopFlying()
+		isFlying = false
+		if flyConn then flyConn:Disconnect(); flyConn = nil end
+		if flyBodyVel then flyBodyVel:Destroy(); flyBodyVel = nil end
+		if flyBodyGyro then flyBodyGyro:Destroy(); flyBodyGyro = nil end
+		humanoid.PlatformStand = false
+		if flyTrack and flyTrack.IsPlaying then flyTrack:Stop(0.1) end
+		if flyIdleTrack and flyIdleTrack.IsPlaying then flyIdleTrack:Stop(0.1) end
+	end
+
+	local function startFlying()
+		if isFlying then return end
+		isFlying = true
+		humanoid.PlatformStand = true
+
+		flyBodyVel = Instance.new("BodyVelocity")
+		flyBodyVel.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+		flyBodyVel.Velocity = Vector3.zero
+		flyBodyVel.Parent = rootPart
+
+		flyBodyGyro = Instance.new("BodyGyro")
+		flyBodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+		flyBodyGyro.P = 10000
+		flyBodyGyro.CFrame = rootPart.CFrame
+		flyBodyGyro.Parent = rootPart
+
+		local camera = Workspace.CurrentCamera
+
+		local function getLocalMoveVector()
+			local success, vec = pcall(function()
+				local playerScripts = player:FindFirstChild("PlayerScripts")
+				if playerScripts then
+					local playerModule = playerScripts:FindFirstChild("PlayerModule")
+					if playerModule then
+						return require(playerModule):GetControls():GetMoveVector()
+					end
+				end
+			end)
+			if success and vec and vec.Magnitude > 0.01 then
+				return vec
+			end
+
+			local moveDir = humanoid.MoveDirection
+			if moveDir.Magnitude > 0.01 then
+				local camCF = camera.CFrame
+				local flatLook = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+				if flatLook.Magnitude > 0.001 then
+					flatLook = flatLook.Unit
+					local flatCF = CFrame.lookAt(Vector3.zero, flatLook)
+					local localDir = flatCF:VectorToObjectSpace(moveDir)
+					return Vector3.new(localDir.X, 0, localDir.Z)
+				end
+			end
+			return Vector3.zero
+		end
+
+		flyConn = RunService.RenderStepped:Connect(function()
+			if not isFlying or not rootPart then
+				stopFlying()
+				return
+			end
+
+			flyBodyGyro.CFrame = camera.CFrame
+
+			local moveVec = getLocalMoveVector()
+			if moveVec.Magnitude > 0.1 then
+				local camCF = camera.CFrame
+				local flyVector = (camCF.LookVector * -moveVec.Z) + (camCF.RightVector * moveVec.X)
+				
+				if flyVector.Magnitude > 0.01 then
+					flyBodyVel.Velocity = flyVector.Unit * CFG.FlySpeed
+					playMovementTrack(flyTrack, 0.1)
+				else
+					flyBodyVel.Velocity = Vector3.zero
+					playMovementTrack(flyIdleTrack, 0.1)
+				end
+			else
+				flyBodyVel.Velocity = Vector3.zero
+				playMovementTrack(flyIdleTrack, 0.1)
+			end
+		end)
+	end
 
 	local function updateWaterPlatformExistence()
 		if isWalkOnWaterActive and isSprinting then
@@ -589,26 +731,6 @@ local function setupCustomAnimations(character)
 		return rayResult ~= nil
 	end
 
-	local function stopAllAnimationsExcept(targetTrack)
-		for _, track in ipairs(allAnimationTracks) do
-			if track and track ~= targetTrack and track.IsPlaying then
-				track:Stop(0.1)
-			end
-		end
-	end
-
-	local function playMovementTrack(track, fadeTime)
-		if not track then return end
-		fadeTime = fadeTime or 0.1
-		stopAllAnimationsExcept(track)
-		if currentMovementTrack == track then
-			if not track.IsPlaying then track:Play(fadeTime) end
-			return
-		end
-		currentMovementTrack = track
-		if not track.IsPlaying then track:Play(fadeTime) end
-	end
-
 	local function stopAirAnimations()
 		if normalJumpTrack and normalJumpTrack.IsPlaying then normalJumpTrack:Stop(0.1) end
 		if sprintJumpTrack and sprintJumpTrack.IsPlaying then sprintJumpTrack:Stop(0.1) end
@@ -658,7 +780,7 @@ local function setupCustomAnimations(character)
 	end
 
 	local function startGliding()
-		if isGliding or not isSprinting or not isGlideActive then return end
+		if isGliding or not isSprinting or not isGlideActive or isFlying then return end
 		local rayParams = RaycastParams.new()
 		local filterInstances = {character}
 		if waterPlatform then table.insert(filterInstances, waterPlatform) end
@@ -728,7 +850,7 @@ local function setupCustomAnimations(character)
 		end
 	end
 
-	local sprintBtn, antiFlingBtn, wallRunBtn, glideBtn, updateNoclipUI = createMobileUI(
+	local sprintBtn, antiFlingBtn, flyBtn, wallRunBtn, glideBtn, updateNoclipUI = createMobileUI(
 		setNoclipState, 
 		updateTrailColor, 
 		function(state)
@@ -746,6 +868,18 @@ local function setupCustomAnimations(character)
 			end
 		end
 	)
+
+	flyBtn.MouseButton1Click:Connect(function()
+		if isFlying then
+			stopFlying()
+			flyBtn.Text = "Fly: OFF"
+			flyBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+		else
+			startFlying()
+			flyBtn.Text = "Fly: ON"
+			flyBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+		end
+	end)
 
 	local function toggleSprint(enable)
 		isSprinting = enable
@@ -781,7 +915,7 @@ local function setupCustomAnimations(character)
 	end
 
 	local function triggerJumpAction()
-		if isJumping or isFalling then return end
+		if isJumping or isFalling or isFlying then return end
 
 		if isWalkingOnWater or isGrounded() then
 			waterJumpCooldown = tick() + 0.5
@@ -893,6 +1027,8 @@ local function setupCustomAnimations(character)
 	end
 
 	renderConn = RunService.RenderStepped:Connect(function()
+		if isFlying then return end
+
 		local state = humanoid:GetState()
 
 		if isSprinting and isWalkOnWaterActive then
@@ -1090,6 +1226,8 @@ local function setupCustomAnimations(character)
 	end)
 
 	humanoid.StateChanged:Connect(function(oldState, newState)
+		if isFlying then return end
+
 		if newState == Enum.HumanoidStateType.Climbing then
 			stopGliding()
 			isWalkingOnWater = false
@@ -1138,6 +1276,7 @@ local function setupCustomAnimations(character)
 	playMovementTrack(idleTrack, 0.1)
 
 	humanoid.Died:Connect(function()
+		stopFlying()
 		if speedLockConn then speedLockConn:Disconnect() end
 		if jumpReqConn then jumpReqConn:Disconnect() end
 		if waterPlatform then waterPlatform:Destroy() end
