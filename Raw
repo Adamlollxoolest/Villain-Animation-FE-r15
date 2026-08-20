@@ -538,7 +538,6 @@ local function setupCustomAnimations(character)
 		wallRunBtn.Visible = isSprinting
 		glideBtn.Visible = isSprinting
 
-		-- Continuous safeguard against external triggers changing walk speed while sprinting
 		if speedLockConn then speedLockConn:Disconnect(); speedLockConn = nil end
 		if isSprinting then
 			speedLockConn = RunService.Heartbeat:Connect(function()
@@ -617,6 +616,23 @@ local function setupCustomAnimations(character)
 	end)
 
 	renderConn = RunService.RenderStepped:Connect(function()
+		-- Predictive Wall Crash Check: Catches solid walls right before impact, stopping the physical fling without slowing normal movement
+		if isSprinting and humanoid.MoveDirection.Magnitude > 0.1 then
+			local rayParams = RaycastParams.new()
+			rayParams.FilterDescendantsInstances = {character}
+			rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+			-- Cast a short feeler in the exact direction the player is moving
+			local moveDir = humanoid.MoveDirection
+			local rayResult = workspace:Raycast(rootPart.Position, moveDir * 4.5, rayParams)
+			
+			if rayResult and rayResult.Instance and rayResult.Instance.CanCollide and math.abs(rayResult.Normal.Y) < 0.3 then
+				-- Instantly strip momentum vectors that point directly into the obstacle
+				local currentVel = rootPart.AssemblyLinearVelocity
+				rootPart.AssemblyLinearVelocity = Vector3.new(0, currentVel.Y, 0)
+			end
+		end
+
 		if isSprinting and isWallRunActive then
 			local rayParams = RaycastParams.new()
 			rayParams.FilterDescendantsInstances = {character}
