@@ -10,31 +10,24 @@ local playerGui = player:WaitForChild("PlayerGui")
 
 local SAVE_FILE_NAME = "CFG_SavedSettings.json"
 
--- ==========================================
--- DEFAULT CFG (CONFIGURATION)
--- ==========================================
 local CFG = {
 	WalkSpeed = 16,
 	SprintSpeed = 235,
 	WallRunSpeed = 200,
 	JumpPower = 80,
 	
-	-- Glide Settings
 	BaseGlideDuration = 1.0,
 	HeightBonusFactor = 0.05,
 	MaxGlideDuration = 10.0,
 	GlideFallSpeed = -5,
 	GlideForwardMultiplier = 1.2,
 
-	-- Walk on Water Settings
 	WalkOnWaterHeightOffset = 0.5,
 
-	-- Trail Color Settings (Default: Cyan/Blue)
 	TrailColorR = 200,
 	TrailColorG = 220,
 	TrailColorB = 255,
 
-	-- Execution & Trigger Automation Flags
 	AutoAntiFlingOnExec = false,
 	AutoSprintOnExec = false,
 	AutoNoclipOnExec = false,
@@ -45,7 +38,7 @@ local CFG = {
 }
 
 local isNoclipActive = false
-local trackedINFHHItems = {} -- Stores every single item spawned by INF-HH
+local trackedINFHHItems = {}
 
 local function saveCFG()
 	if writefile then
@@ -78,16 +71,16 @@ local ANIMATIONS = {
 	SprintFall = "rbxassetid://81030893339218",
 	NormalClimb = "rbxassetid://656114359",
 	SprintClimb = "rbxassetid://88763136693023",
+	Swim = "rbxassetid://913384386",
+	SwimIdle = "rbxassetid://913389285"
 }
 
--- Absolute Destruction Handler for INF-HH Shiftlock
 local function setShiftlockState(state)
 	CFG.Shiftlock = state
 	saveCFG()
 	
 	if state then
 		local connections = {}
-		
 		local function trackContainer(container)
 			table.insert(connections, container.DescendantAdded:Connect(function(descendant)
 				if descendant ~= playerGui and descendant.Name ~= "TouchGui" and descendant.Name ~= "MobileControlGui" then
@@ -109,37 +102,17 @@ local function setShiftlockState(state)
 			end
 		end)
 	else
+		-- Only destroy the exact elements that were spawned/tracked during the INF-HH script injection
 		for _, item in ipairs(trackedINFHHItems) do
 			if item and item.Parent then
 				pcall(function() item:Destroy() end)
 			end
 		end
 		trackedINFHHItems = {}
-
-		pcall(function()
-			for _, gui in ipairs(playerGui:GetChildren()) do
-				if gui.Name ~= "MobileControlGui" and gui.Name ~= "TouchGui" then
-					local nameLower = string.lower(gui.Name)
-					if nameLower:find("shift") or nameLower:find("lock") or nameLower:find("inf") or nameLower:find("hh") or nameLower:find("gui") then
-						gui:Destroy()
-					end
-				end
-			end
-		end)
-
-		pcall(function()
-			for _, gui in ipairs(CoreGui:GetChildren()) do
-				local nameLower = string.lower(gui.Name)
-				if nameLower:find("shift") or nameLower:find("lock") or nameLower:find("inf") or nameLower:find("hh") then
-					gui:Destroy()
-				end
-			end
-		end)
 	end
 end
 
--- Mobile UI Setup
-local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
+local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, setWaterWalkToggleCallback, updateSpeedCallback, updateJumpCallback)
 	local existingGui = playerGui:FindFirstChild("MobileControlGui")
 	if existingGui then existingGui:Destroy() end
 
@@ -165,7 +138,6 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 		local uiCorner = Instance.new("UICorner")
 		uiCorner.CornerRadius = UDim.new(0, 10)
 		uiCorner.Parent = button
-
 		return button
 	end
 
@@ -175,7 +147,6 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 	local glideBtn = makeButton("GlideButton", "Glide: OFF", UDim2.new(0, 20, 0, 170), Color3.fromRGB(220, 50, 50))
 	local cfgBtn = makeButton("CFGButton", "CFG Menu", UDim2.new(0, 20, 0, 220), Color3.fromRGB(100, 100, 100))
 	
-	-- Expanded CFG Frame height to prevent overlapping elements
 	local cfgFrame = Instance.new("Frame")
 	cfgFrame.Name = "CFGFrame"
 	cfgFrame.Size = UDim2.new(0, 280, 0, 535)
@@ -190,23 +161,17 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 	frameCorner.Parent = cfgFrame
 
 	local dragging, dragInput, dragStart, startPos
-
-	local function updateDrag(input)
-		local delta = input.Position - dragStart
-		cfgFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-	end
-
 	cfgFrame.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			dragging = true
-			dragStart = input.Position
-			startPos = cfgFrame.Position
-
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					dragging = false
-				end
-			end)
+			local target = input.Target
+			if target == cfgFrame then
+				dragging = true
+				dragStart = input.Position
+				startPos = cfgFrame.Position
+				input.Changed:Connect(function()
+					if input.UserInputState == Enum.UserInputState.End then dragging = false end
+				end)
+			end
 		end
 	end)
 
@@ -218,7 +183,8 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 
 	UserInputService.InputChanged:Connect(function(input)
 		if input == dragInput and dragging then
-			updateDrag(input)
+			local delta = input.Position - dragStart
+			cfgFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
 		end
 	end)
 
@@ -242,18 +208,24 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 		box.Text = tostring(defaultVal)
 		box.Font = Enum.Font.SourceSansBold
 		box.TextSize = 14
+		box.ClearTextOnFocus = false
 		box.Parent = cfgFrame
 
 		local boxCorner = Instance.new("UICorner")
 		boxCorner.CornerRadius = UDim.new(0, 6)
 		boxCorner.Parent = box
 
-		box.FocusLost:Connect(function()
+		box:GetPropertyChangedSignal("Text"):Connect(function()
 			local num = tonumber(box.Text)
 			if num then
 				callback(num)
 				saveCFG()
-			else
+			end
+		end)
+
+		box.FocusLost:Connect(function()
+			local num = tonumber(box.Text)
+			if not num then
 				box.Text = tostring(defaultVal)
 			end
 		end)
@@ -293,7 +265,6 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 		knobCorner.Parent = sliderKnob
 
 		local state = defaultState
-
 		local function setUIState(newState)
 			state = newState
 			if state then
@@ -315,12 +286,13 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 		return setUIState
 	end
 
-	createCFGInput("Sprint Speed:", CFG.SprintSpeed, 10, function(val) CFG.SprintSpeed = val end)
+	createCFGInput("Sprint Speed:", CFG.SprintSpeed, 10, function(val) 
+		CFG.SprintSpeed = val 
+		if updateSpeedCallback then updateSpeedCallback() end
+	end)
 	createCFGInput("Jump Power:", CFG.JumpPower, 45, function(val) 
-		CFG.JumpPower = val
-		if player.Character and player.Character:FindFirstChild("Humanoid") then
-			player.Character.Humanoid.JumpPower = val
-		end
+		CFG.JumpPower = val 
+		if updateJumpCallback then updateJumpCallback() end
 	end)
 	createCFGInput("Wall Speed:", CFG.WallRunSpeed, 80, function(val) CFG.WallRunSpeed = val end)
 	createCFGInput("Glide Base (s):", CFG.BaseGlideDuration, 115, function(val) CFG.BaseGlideDuration = val end)
@@ -336,12 +308,14 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 	createCFGToggle("Sprint (Exec On):", CFG.AutoSprintOnExec, 295, function(state) CFG.AutoSprintOnExec = state end)
 	createCFGToggle("Glide (On Sprint):", CFG.AutoGlideOnSprint, 330, function(state) CFG.AutoGlideOnSprint = state end)
 	createCFGToggle("Wall Run (On Sprint):", CFG.AutoWallRunOnSprint, 365, function(state) CFG.AutoWallRunOnSprint = state end)
-	createCFGToggle("Water Walk (On Sprint):", CFG.AutoWalkOnWaterOnSprint, 400, function(state) CFG.AutoWalkOnWaterOnSprint = state end)
+	
+	createCFGToggle("Water Walk (On Sprint):", CFG.AutoWalkOnWaterOnSprint, 400, function(state) 
+		CFG.AutoWalkOnWaterOnSprint = state 
+		setWaterWalkToggleCallback(state)
+	end)
+
 	createCFGToggle("Shiftlock:", CFG.Shiftlock, 435, function(state) setShiftlockState(state) end)
 
-	-- ==========================================
-	-- SECOND MENU: COLOR TRAIL WINDOW
-	-- ==========================================
 	local colorTrailFrame = Instance.new("Frame")
 	colorTrailFrame.Name = "ColorTrailFrame"
 	colorTrailFrame.Size = UDim2.new(0, 260, 0, 275)
@@ -363,35 +337,6 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 	ctTitle.Font = Enum.Font.SourceSansBold
 	ctTitle.TextSize = 16
 	ctTitle.Parent = colorTrailFrame
-
-	-- Make Color Trail Menu Draggable
-	local ctDragging, ctDragInput, ctDragStart, ctStartPos
-	colorTrailFrame.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			ctDragging = true
-			ctDragStart = input.Position
-			ctStartPos = colorTrailFrame.Position
-
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					ctDragging = false
-				end
-			end)
-		end
-	end)
-
-	colorTrailFrame.InputChanged:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-			ctDragInput = input
-		end
-	end)
-
-	UserInputService.InputChanged:Connect(function(input)
-		if input == ctDragInput and ctDragging then
-			local delta = input.Position - ctDragStart
-			colorTrailFrame.Position = UDim2.new(ctStartPos.X.Scale, ctStartPos.X.Offset + delta.X, ctStartPos.Y.Scale, ctStartPos.Y.Offset + delta.Y)
-		end
-	end)
 
 	local pickerBox = Instance.new("TextButton")
 	pickerBox.Size = UDim2.new(0, 240, 0, 80)
@@ -423,15 +368,8 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 	overlayGradient.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 	overlayGradient.Parent = pickerBox
 
-	local ogCorner = Instance.new("UICorner")
-	ogCorner.CornerRadius = UDim.new(0, 6)
-	ogCorner.Parent = overlayGradient
-
 	local ogGrad = Instance.new("UIGradient")
-	ogGrad.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1),
-		NumberSequenceKeypoint.new(1, 0)
-	})
+	ogGrad.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0)})
 	ogGrad.Rotation = 90
 	ogGrad.Parent = overlayGradient
 
@@ -448,17 +386,6 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 	scCorner.CornerRadius = UDim.new(1, 0)
 	scCorner.Parent = selectorCircle
 
-	local rgbLabel = Instance.new("TextLabel")
-	rgbLabel.Size = UDim2.new(0, 100, 0, 25)
-	rgbLabel.Position = UDim2.new(0, 10, 0, 126)
-	rgbLabel.BackgroundTransparency = 1
-	rgbLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	rgbLabel.Text = "RGB:"
-	rgbLabel.Font = Enum.Font.SourceSans
-	rgbLabel.TextSize = 14
-	rgbLabel.TextXAlignment = Enum.TextXAlignment.Left
-	rgbLabel.Parent = colorTrailFrame
-
 	local rgbBox = Instance.new("TextBox")
 	rgbBox.Size = UDim2.new(0, 130, 0, 25)
 	rgbBox.Position = UDim2.new(0, 120, 0, 126)
@@ -468,21 +395,6 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 	rgbBox.Font = Enum.Font.SourceSansBold
 	rgbBox.TextSize = 13
 	rgbBox.Parent = colorTrailFrame
-
-	local rgbCorner = Instance.new("UICorner")
-	rgbCorner.CornerRadius = UDim.new(0, 6)
-	rgbCorner.Parent = rgbBox
-
-	local hexLabel = Instance.new("TextLabel")
-	hexLabel.Size = UDim2.new(0, 100, 0, 25)
-	hexLabel.Position = UDim2.new(0, 10, 0, 157)
-	hexLabel.BackgroundTransparency = 1
-	hexLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-	hexLabel.Text = "HEX:"
-	hexLabel.Font = Enum.Font.SourceSans
-	hexLabel.TextSize = 14
-	hexLabel.TextXAlignment = Enum.TextXAlignment.Left
-	hexLabel.Parent = colorTrailFrame
 
 	local hexBox = Instance.new("TextBox")
 	hexBox.Size = UDim2.new(0, 130, 0, 25)
@@ -494,108 +406,24 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 	hexBox.TextSize = 13
 	hexBox.Parent = colorTrailFrame
 
-	local hexCorner = Instance.new("UICorner")
-	hexCorner.CornerRadius = UDim.new(0, 6)
-	hexCorner.Parent = hexBox
-
 	local function applyColorValues(r, g, b)
 		CFG.TrailColorR = math.clamp(math.floor(r), 0, 255)
 		CFG.TrailColorG = math.clamp(math.floor(g), 0, 255)
 		CFG.TrailColorB = math.clamp(math.floor(b), 0, 255)
-		
 		rgbBox.Text = string.format("%d,%d,%d", CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
 		hexBox.Text = string.format("#%02X%02X%02X", CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
-		
 		updateTrailColorCallback(CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
 		saveCFG()
 	end
 
-	local pickingColor = false
-	local function updateColorFromInput(inputPos)
-		local absPos = pickerBox.AbsolutePosition
-		local absSize = pickerBox.AbsoluteSize
-		
-		local relX = math.clamp((inputPos.X - absPos.X) / absSize.X, 0, 1)
-		local relY = math.clamp((inputPos.Y - absPos.Y) / absSize.Y, 0, 1)
-		
-		selectorCircle.Position = UDim2.new(relX, 0, relY, 0)
-		
-		local hue = relX
-		local saturation = 1 - (relY * 0.5)
-		local value = 1 - relY
-		
-		local rgbColor = Color3.fromHSV(hue, saturation, value)
-		applyColorValues(rgbColor.R * 255, rgbColor.G * 255, rgbColor.B * 255)
-	end
-
 	pickerBox.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			pickingColor = true
-			updateColorFromInput(input.Position)
-		end
-	end)
-
-	UserInputService.InputChanged:Connect(function(input)
-		if pickingColor and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-			updateColorFromInput(input.Position)
-		end
-	end)
-
-	UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			pickingColor = false
-		end
-	end)
-
-	local function makePresetBtn(name, colorName, colorVal, posX, posY)
-		local btn = Instance.new("TextButton")
-		btn.Size = UDim2.new(0, 72, 0, 26)
-		btn.Position = UDim2.new(0, posX, 0, posY)
-		btn.BackgroundColor3 = colorVal
-		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		btn.Text = colorName
-		btn.Font = Enum.Font.SourceSansBold
-		btn.TextSize = 11
-		btn.Parent = colorTrailFrame
-
-		local bc = Instance.new("UICorner")
-		bc.CornerRadius = UDim.new(0, 6)
-		bc.Parent = btn
-
-		btn.MouseButton1Click:Connect(function()
-			applyColorValues(colorVal.R * 255, colorVal.G * 255, colorVal.B * 255)
-		end)
-	end
-
-	makePresetBtn("RedPreset", "Red", Color3.fromRGB(255, 0, 0), 10, 190)
-	makePresetBtn("GreenPreset", "Green", Color3.fromRGB(0, 255, 0), 94, 190)
-	makePresetBtn("BluePreset", "Blue", Color3.fromRGB(0, 120, 255), 178, 190)
-	makePresetBtn("WhitePreset", "White", Color3.fromRGB(255, 255, 255), 10, 225)
-	makePresetBtn("DarkBluePreset", "Dark Blue", Color3.fromRGB(0, 0, 139), 94, 225)
-
-	rgbBox.FocusLost:Connect(function()
-		local r, g, b = rgbBox.Text:match("([^,]+),([^,]+),([^,]+)")
-		r, g, b = tonumber(r), tonumber(g), tonumber(b)
-		if r and g and b then
-			applyColorValues(r, g, b)
-		else
-			rgbBox.Text = string.format("%d,%d,%d", CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
-		end
-	end)
-
-	hexBox.FocusLost:Connect(function()
-		local hex = hexBox.Text:gsub("#", "")
-		if #hex == 6 then
-			local r = tonumber("0x" .. hex:sub(1, 2))
-			local g = tonumber("0x" .. hex:sub(3, 4))
-			local b = tonumber("0x" .. hex:sub(5, 6))
-			if r and g and b then
-				applyColorValues(r, g, b)
-			else
-				hexBox.Text = string.format("#%02X%02X%02X", CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
-			end
-		else
-			hexBox.Text = string.format("#%02X%02X%02X", CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
+			local absPos, absSize = pickerBox.AbsolutePosition, pickerBox.AbsoluteSize
+			local relX = math.clamp((input.Position.X - absPos.X) / absSize.X, 0, 1)
+			local relY = math.clamp((input.Position.Y - absPos.Y) / absSize.Y, 0, 1)
+			selectorCircle.Position = UDim2.new(relX, 0, relY, 0)
+			local col = Color3.fromHSV(relX, 1 - (relY * 0.5), 1 - relY)
+			applyColorValues(col.R * 255, col.G * 255, col.B * 255)
 		end
 	end)
 
@@ -607,11 +435,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 	colorTrailMenuBtn.Text = "Color Trail Settings"
 	colorTrailMenuBtn.Font = Enum.Font.SourceSansBold
 	colorTrailMenuBtn.TextSize = 14
-	colorTrailMenuBtn.Parent = cfgFrame
-
-	local ctmCorner = Instance.new("UICorner")
-	ctmCorner.CornerRadius = UDim.new(0, 6)
-	ctmCorner.Parent = colorTrailMenuBtn
+	colorTrailMenuBtn.Parent = colorTrailFrame
 
 	colorTrailMenuBtn.MouseButton1Click:Connect(function()
 		colorTrailFrame.Visible = not colorTrailFrame.Visible
@@ -630,7 +454,7 @@ end
 local function setupCustomAnimations(character)
 	local humanoid = character:WaitForChild("Humanoid")
 	local rootPart = character:WaitForChild("HumanoidRootPart")
-	
+	local headPart = character:WaitForChild("Head")
 	local torsoPart = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or rootPart
 	
 	for _, child in ipairs(character:GetChildren()) do
@@ -647,22 +471,11 @@ local function setupCustomAnimations(character)
 	task.wait(0.2)
 	local animator = humanoid:WaitForChild("Animator")
 
-	humanoid:GetPropertyChangedSignal("JumpPower"):Connect(function()
-		if humanoid.JumpPower ~= CFG.JumpPower then
-			humanoid.JumpPower = CFG.JumpPower
-		end
-	end)
-
 	local function loadAnimation(assetId, priority, looped)
 		local anim = Instance.new("Animation")
 		anim.AnimationId = assetId
-		
-		local success, track = pcall(function()
-			return animator:LoadAnimation(anim)
-		end)
-		
+		local success, track = pcall(function() return animator:LoadAnimation(anim) end)
 		if not success or not track then return nil end
-
 		track.Priority = priority or Enum.AnimationPriority.Action
 		track.Looped = looped ~= nil and looped or false
 		track:AdjustWeight(1)
@@ -673,25 +486,56 @@ local function setupCustomAnimations(character)
 	local idleTrack = loadAnimation(ANIMATIONS.Idle, Enum.AnimationPriority.Idle, true)
 	local walkTrack = loadAnimation(ANIMATIONS.Walk, Enum.AnimationPriority.Movement, true)
 	local runTrack = loadAnimation(ANIMATIONS.Run, Enum.AnimationPriority.Movement, true)
-	
 	local normalJumpTrack = loadAnimation(ANIMATIONS.NormalJump, Enum.AnimationPriority.Action, false)
 	local sprintJumpTrack = loadAnimation(ANIMATIONS.SprintJump, Enum.AnimationPriority.Action, false)
 	local normalFallTrack = loadAnimation(ANIMATIONS.NormalFall, Enum.AnimationPriority.Action, true)
 	local sprintFallTrack = loadAnimation(ANIMATIONS.SprintFall, Enum.AnimationPriority.Action, true)
-	
 	local normalClimbTrack = loadAnimation(ANIMATIONS.NormalClimb, Enum.AnimationPriority.Action, true)
 	local sprintClimbTrack = loadAnimation(ANIMATIONS.SprintClimb, Enum.AnimationPriority.Action, true)
+	local swimTrack = loadAnimation(ANIMATIONS.Swim, Enum.AnimationPriority.Action, true)
+	local swimIdleTrack = loadAnimation(ANIMATIONS.SwimIdle, Enum.AnimationPriority.Action, true)
+
+	local allAnimationTracks = {
+		idleTrack, walkTrack, runTrack,
+		normalJumpTrack, sprintJumpTrack,
+		normalFallTrack, sprintFallTrack,
+		normalClimbTrack, sprintClimbTrack,
+		swimTrack, swimIdleTrack
+	}
 
 	local isFalling, isJumping, isSprinting = false, false, false
 	local isWallRunning, isWallRunActive, isGlideActive, isGliding, isAntiFlingActive = false, false, false, false, false
-	local isWalkOnWaterActive, isWalkingOnWater = false, false
-	local waterJumpCooldown = 0 -- Grace period to ensure jumping off water works
+	local isWalkOnWaterActive = CFG.AutoWalkOnWaterOnSprint
+	local isWalkingOnWater = false
+	local waterJumpCooldown = 0 
 	
 	local glideStartTime = 0
 	local calculatedGlideDuration = CFG.BaseGlideDuration
 	local linearVelocity, glideAttachment = nil, nil
-	local noclipConn, renderConn, antiFlingConn, speedLockConn = nil, nil, nil, nil
+	local noclipConn, renderConn, antiFlingConn, speedLockConn, jumpReqConn = nil, nil, nil, nil, nil
 	local currentMovementTrack = nil
+
+	local waterPlatform = nil
+
+	local function updateWaterPlatformExistence()
+		if isWalkOnWaterActive and isSprinting then
+			if not waterPlatform or not waterPlatform.Parent then
+				waterPlatform = Instance.new("Part")
+				waterPlatform.Name = "WaterPlatform"
+				waterPlatform.Size = Vector3.new(16, 1.5, 16)
+				waterPlatform.Anchored = true
+				waterPlatform.Transparency = 1
+				waterPlatform.CanCollide = true
+				waterPlatform.Parent = workspace
+			end
+		else
+			if waterPlatform then
+				waterPlatform:Destroy()
+				waterPlatform = nil
+			end
+			isWalkingOnWater = false
+		end
+	end
 
 	local att0 = Instance.new("Attachment")
 	att0.Position = Vector3.new(0, 0.7, 0.5)
@@ -706,11 +550,7 @@ local function setupCustomAnimations(character)
 	persistentTrail.Attachment1 = att1
 	persistentTrail.Lifetime = 0.4
 	persistentTrail.MinLength = 0.05
-	
-	persistentTrail.WidthScale = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 1.2),
-		NumberSequenceKeypoint.new(1, 0.0)
-	})
+	persistentTrail.WidthScale = NumberSequence.new({NumberSequenceKeypoint.new(0, 1.2), NumberSequenceKeypoint.new(1, 0.0)})
 	
 	local function updateTrailColor(r, g, b)
 		local baseColor = Color3.fromRGB(r, g, b)
@@ -718,39 +558,83 @@ local function setupCustomAnimations(character)
 	end
 
 	updateTrailColor(CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
-
 	persistentTrail.Transparency = NumberSequence.new(0.05, 1)
 	persistentTrail.LightEmission = 1
 	persistentTrail.Enabled = false
 	persistentTrail.Parent = torsoPart
 
-	local function playMovementTrack(track)
+	local function isGrounded()
+		local rayParams = RaycastParams.new()
+		local filterInstances = {character}
+		if waterPlatform then table.insert(filterInstances, waterPlatform) end
+		rayParams.FilterDescendantsInstances = filterInstances
+		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+		rayParams.IgnoreWater = true
+		
+		local hipHeight = humanoid.HipHeight > 0 and humanoid.HipHeight or 2
+		local rayResult = workspace:Raycast(rootPart.Position, Vector3.new(0, -(hipHeight + 1.5), 0), rayParams)
+		return rayResult ~= nil
+	end
+
+	local function stopAllAnimationsExcept(targetTrack)
+		for _, track in ipairs(allAnimationTracks) do
+			if track and track ~= targetTrack and track.IsPlaying then
+				track:Stop(0.1)
+			end
+		end
+	end
+
+	local function playMovementTrack(track, fadeTime)
 		if not track then return end
+		fadeTime = fadeTime or 0.1
+		stopAllAnimationsExcept(track)
 		if currentMovementTrack == track then
-			if not track.IsPlaying then track:Play(0.1) end
+			if not track.IsPlaying then track:Play(fadeTime) end
 			return
 		end
-
-		if currentMovementTrack and currentMovementTrack.IsPlaying then
-			currentMovementTrack:Stop(0.1)
-		end
-
 		currentMovementTrack = track
-		if not track.IsPlaying then
-			track:Play(0.1)
-		end
+		if not track.IsPlaying then track:Play(fadeTime) end
 	end
 
 	local function stopAirAnimations()
-		if normalJumpTrack and normalJumpTrack.IsPlaying then normalJumpTrack:Stop() end
-		if sprintJumpTrack and sprintJumpTrack.IsPlaying then sprintJumpTrack:Stop() end
-		if normalFallTrack and normalFallTrack.IsPlaying then normalFallTrack:Stop() end
-		if sprintFallTrack and sprintFallTrack.IsPlaying then sprintFallTrack:Stop() end
+		if normalJumpTrack and normalJumpTrack.IsPlaying then normalJumpTrack:Stop(0.1) end
+		if sprintJumpTrack and sprintJumpTrack.IsPlaying then sprintJumpTrack:Stop(0.1) end
+		if normalFallTrack and normalFallTrack.IsPlaying then normalFallTrack:Stop(0.1) end
+		if sprintFallTrack and sprintFallTrack.IsPlaying then sprintFallTrack:Stop(0.1) end
 	end
 
 	local function stopClimbAnimations()
-		if normalClimbTrack and normalClimbTrack.IsPlaying then normalClimbTrack:Stop() end
-		if sprintClimbTrack and sprintClimbTrack.IsPlaying then sprintClimbTrack:Stop() end
+		if normalClimbTrack and normalClimbTrack.IsPlaying then normalClimbTrack:Stop(0.1) end
+		if sprintClimbTrack and sprintClimbTrack.IsPlaying then sprintClimbTrack:Stop(0.1) end
+	end
+
+	local function detachFromWall()
+		if not isWallRunning then return end
+		isWallRunning = false
+		humanoid.WalkSpeed = isSprinting and CFG.SprintSpeed or CFG.WalkSpeed
+		stopClimbAnimations()
+		if sprintClimbTrack then sprintClimbTrack:AdjustSpeed(1) end
+
+		stopAirAnimations()
+		
+		local currentY = rootPart.AssemblyLinearVelocity.Y
+		if currentY > 1 then
+			isJumping = true
+			isFalling = false
+			local trackToPlay = (isSprinting and sprintJumpTrack) or normalJumpTrack
+			if trackToPlay then
+				stopAllAnimationsExcept(trackToPlay)
+				trackToPlay:Play(0.1)
+			end
+		else
+			isFalling = true
+			isJumping = false
+			local trackToPlay = (isSprinting and sprintFallTrack) or normalFallTrack
+			if trackToPlay then
+				stopAllAnimationsExcept(trackToPlay)
+				trackToPlay:Play(0.1)
+			end
+		end
 	end
 
 	local function stopGliding()
@@ -762,9 +646,10 @@ local function setupCustomAnimations(character)
 
 	local function startGliding()
 		if isGliding or not isSprinting or not isGlideActive then return end
-		
 		local rayParams = RaycastParams.new()
-		rayParams.FilterDescendantsInstances = {character}
+		local filterInstances = {character}
+		if waterPlatform then table.insert(filterInstances, waterPlatform) end
+		rayParams.FilterDescendantsInstances = filterInstances
 		rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
 		local rayResult = workspace:Raycast(rootPart.Position, Vector3.new(0, -500, 0), rayParams)
@@ -778,7 +663,6 @@ local function setupCustomAnimations(character)
 			glideAttachment = Instance.new("Attachment")
 			glideAttachment.Parent = rootPart
 		end
-
 		if not linearVelocity then
 			linearVelocity = Instance.new("LinearVelocity")
 			linearVelocity.Attachment0 = glideAttachment
@@ -786,22 +670,18 @@ local function setupCustomAnimations(character)
 			linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
 			linearVelocity.Parent = rootPart
 		end
-
 		persistentTrail.Enabled = true
 	end
 
 	local function setAntiFlingState(enable)
 		isAntiFlingActive = enable
 		if antiFlingConn then antiFlingConn:Disconnect(); antiFlingConn = nil end
-
 		if isAntiFlingActive then
 			antiFlingConn = RunService.Stepped:Connect(function()
 				for _, p in ipairs(Players:GetPlayers()) do
 					if p ~= player and p.Character then
 						for _, part in ipairs(p.Character:GetDescendants()) do
-							if part:IsA("BasePart") then
-								part.CanCollide = false
-							end
+							if part:IsA("BasePart") then part.CanCollide = false end
 						end
 					end
 				end
@@ -812,7 +692,6 @@ local function setupCustomAnimations(character)
 	local function setNoclipState(enable)
 		isNoclipActive = enable
 		if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
-
 		if isNoclipActive then
 			noclipConn = RunService.Stepped:Connect(function()
 				if character then
@@ -825,7 +704,7 @@ local function setupCustomAnimations(character)
 			if character then
 				for _, part in ipairs(character:GetDescendants()) do
 					if part:IsA("BasePart") then
-						if part.Name == "HumanoidRootPart" or part.Name == "Torso" or part.Name == "UpperTorso" or part.Name == "LowerTorso" or part.Name == "Head" then
+						if table.find({"HumanoidRootPart", "Torso", "UpperTorso", "LowerTorso", "Head"}, part.Name) then
 							part.CanCollide = true
 						else
 							part.CanCollide = false
@@ -836,7 +715,24 @@ local function setupCustomAnimations(character)
 		end
 	end
 
-	local sprintBtn, antiFlingBtn, wallRunBtn, glideBtn, updateNoclipUI = createMobileUI(setNoclipState, updateTrailColor)
+	local sprintBtn, antiFlingBtn, wallRunBtn, glideBtn, updateNoclipUI = createMobileUI(
+		setNoclipState, 
+		updateTrailColor, 
+		function(state)
+			isWalkOnWaterActive = state
+			updateWaterPlatformExistence()
+		end,
+		function()
+			if isSprinting and humanoid and humanoid.Parent then
+				humanoid.WalkSpeed = CFG.SprintSpeed
+			end
+		end,
+		function()
+			if humanoid and humanoid.Parent then
+				humanoid.JumpPower = CFG.JumpPower
+			end
+		end
+	)
 
 	local function toggleSprint(enable)
 		isSprinting = enable
@@ -844,53 +740,63 @@ local function setupCustomAnimations(character)
 		wallRunBtn.Visible = isSprinting
 		glideBtn.Visible = isSprinting
 
+		updateWaterPlatformExistence()
+
 		if speedLockConn then speedLockConn:Disconnect(); speedLockConn = nil end
 		if isSprinting then
 			speedLockConn = RunService.Heartbeat:Connect(function()
-				if isSprinting and humanoid and humanoid.Parent then
-					if humanoid.WalkSpeed ~= CFG.SprintSpeed then
-						humanoid.WalkSpeed = CFG.SprintSpeed
-					end
+				if isSprinting and humanoid and humanoid.Parent and humanoid.WalkSpeed ~= CFG.SprintSpeed then
+					humanoid.WalkSpeed = CFG.SprintSpeed
 				end
 			end)
-
 			sprintBtn.Text = "Sprint: ON"
 			sprintBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
 			if CFG.AutoGlideOnSprint then isGlideActive = true; glideBtn.Text = "Glide: ON"; glideBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50) end
 			if CFG.AutoWallRunOnSprint then isWallRunActive = true; wallRunBtn.Text = "Wall Run: ON"; wallRunBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50) end
-			if CFG.AutoWalkOnWaterOnSprint then isWalkOnWaterActive = true end
 		else
 			sprintBtn.Text = "Sprint: OFF"
 			sprintBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
 			isWallRunActive = false
-			isWallRunning = false
+			detachFromWall()
 			isGlideActive = false
-			isWalkOnWaterActive = false
 			isWalkingOnWater = false
 			stopGliding()
 			wallRunBtn.Text = "Wall Run: OFF"; wallRunBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
 			glideBtn.Text = "Glide: OFF"; glideBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-			stopClimbAnimations()
+			if waterPlatform then waterPlatform.CanCollide = false end
 		end
 	end
+
+	local function triggerJumpAction()
+		if isJumping or isFalling then return end
+
+		if isWalkingOnWater or isGrounded() then
+			waterJumpCooldown = tick() + 0.5
+			isWalkingOnWater = false
+			if waterPlatform then waterPlatform.CanCollide = false end
+			isJumping = true
+			isFalling = false
+			stopAirAnimations()
+			
+			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+			local curVel = rootPart.AssemblyLinearVelocity
+			rootPart.AssemblyLinearVelocity = Vector3.new(curVel.X, CFG.JumpPower, curVel.Z)
+			
+			if isSprinting and sprintJumpTrack then 
+				stopAllAnimationsExcept(sprintJumpTrack)
+				sprintJumpTrack:Play(0.1)
+			elseif normalJumpTrack then 
+				stopAllAnimationsExcept(normalJumpTrack)
+				normalJumpTrack:Play(0.1) 
+			end
+		end
+	end
+
+	jumpReqConn = UserInputService.JumpRequest:Connect(triggerJumpAction)
 
 	UserInputService.InputBegan:Connect(function(input, gpe)
 		if gpe then return end
 		if input.KeyCode == Enum.KeyCode.LeftShift then toggleSprint(true) end
-		if input.KeyCode == Enum.KeyCode.Space then
-			if isWalkingOnWater then
-				waterJumpCooldown = tick() + 0.35 -- Allow jump freedom off water for 350ms
-				isWalkingOnWater = false
-				isJumping = true
-				isFalling = false
-				stopAirAnimations()
-				if isSprinting then
-					if sprintJumpTrack then sprintJumpTrack:Play() end
-				else
-					if normalJumpTrack then normalJumpTrack:Play() end
-				end
-			end
-		end
 		if input.KeyCode == Enum.KeyCode.N then
 			local newState = not isNoclipActive
 			setNoclipState(newState)
@@ -905,7 +811,6 @@ local function setupCustomAnimations(character)
 	end)
 
 	sprintBtn.MouseButton1Click:Connect(function() toggleSprint(not isSprinting) end)
-
 	antiFlingBtn.MouseButton1Click:Connect(function()
 		isAntiFlingActive = not isAntiFlingActive
 		antiFlingBtn.Text = isAntiFlingActive and "Anti Fling: ON" or "Anti Fling: OFF"
@@ -917,7 +822,9 @@ local function setupCustomAnimations(character)
 		isWallRunActive = not isWallRunActive
 		wallRunBtn.Text = isWallRunActive and "Wall Run: ON" or "Wall Run: OFF"
 		wallRunBtn.BackgroundColor3 = isWallRunActive and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(220, 50, 50)
-		if not isWallRunActive then isWallRunning = false; stopClimbAnimations() end
+		if not isWallRunActive then
+			detachFromWall()
+		end
 	end)
 
 	glideBtn.MouseButton1Click:Connect(function()
@@ -936,71 +843,188 @@ local function setupCustomAnimations(character)
 		if CFG.AutoSprintOnExec then toggleSprint(true) end
 		if CFG.AutoNoclipOnExec then setNoclipState(true) end
 		if CFG.Shiftlock then setShiftlockState(true) end
-		if CFG.AutoWalkOnWaterOnSprint then isWalkOnWaterActive = true end
 	end)
 
+	local function isHeadInWater()
+		local terrain = workspace.Terrain
+		if not terrain then return false end
+
+		local headPos = headPart.Position
+		local region = Region3.new(headPos - Vector3.new(0.5, 0.5, 0.5), headPos + Vector3.new(0.5, 0.5, 0.5))
+		region = region:ExpandToGrid(4)
+
+		local materials = terrain:ReadVoxels(region, 4)
+		for x = 1, materials.Size.X do
+			for y = 1, materials.Size.Y do
+				for z = 1, materials.Size.Z do
+					if materials[x][y][z] == Enum.Material.Water then
+						return true
+					end
+				end
+			end
+		end
+
+		local rayParams = RaycastParams.new()
+		local filterInstances = {character}
+		if waterPlatform then table.insert(filterInstances, waterPlatform) end
+		rayParams.FilterDescendantsInstances = filterInstances
+		rayParams.FilterType = Enum.RaycastFilterType.Exclude
+		rayParams.IgnoreWater = false
+
+		local rayResult = workspace:Raycast(headPos + Vector3.new(0, 2, 0), Vector3.new(0, -2.5, 0), rayParams)
+		if rayResult and (rayResult.Material == Enum.Material.Water or string.find(string.lower(rayResult.Instance.Name), "water")) then
+			return true
+		end
+
+		return false
+	end
+
 	renderConn = RunService.RenderStepped:Connect(function()
+		local state = humanoid:GetState()
+
+		if isSprinting and isWalkOnWaterActive then
+			local rayParams = RaycastParams.new()
+			local filterInstances = {character}
+			if waterPlatform then table.insert(filterInstances, waterPlatform) end
+			rayParams.FilterDescendantsInstances = filterInstances
+			rayParams.FilterType = Enum.RaycastFilterType.Exclude
+			rayParams.IgnoreWater = false
+
+			local rayOrigin = rootPart.Position + Vector3.new(0, 5, 0)
+			local rayResult = workspace:Raycast(rayOrigin, Vector3.new(0, -35, 0), rayParams)
+			
+			if rayResult and (rayResult.Material == Enum.Material.Water or string.find(string.lower(rayResult.Instance.Name), "water")) then
+				local surfaceY = rayResult.Position.Y
+				local isUnderwater = headPart.Position.Y < (surfaceY - 0.5) or isHeadInWater()
+
+				if isUnderwater then
+					isWalkingOnWater = false
+					if waterPlatform then waterPlatform.CanCollide = false end
+				else
+					isWalkingOnWater = true
+					stopGliding()
+
+					if state == Enum.HumanoidStateType.Swimming or state == Enum.HumanoidStateType.Freefall then
+						humanoid:ChangeState(Enum.HumanoidStateType.Running)
+					end
+
+					if waterPlatform then
+						waterPlatform.CFrame = CFrame.new(rootPart.Position.X, surfaceY - (waterPlatform.Size.Y / 2) + CFG.WalkOnWaterHeightOffset, rootPart.Position.Z)
+						waterPlatform.CanCollide = true
+					end
+					
+					if tick() > waterJumpCooldown and rootPart.Position.Y < surfaceY + 1 then
+						rootPart.CFrame = CFrame.new(rootPart.Position.X, surfaceY + 3, rootPart.Position.Z)
+						rootPart.AssemblyLinearVelocity = Vector3.new(rootPart.AssemblyLinearVelocity.X, 0, rootPart.AssemblyLinearVelocity.Z)
+					end
+				end
+			else
+				isWalkingOnWater = false
+				if waterPlatform then waterPlatform.CanCollide = false end
+			end
+		else
+			isWalkingOnWater = false
+			if waterPlatform then waterPlatform.CanCollide = false end
+		end
+
+		if state == Enum.HumanoidStateType.Swimming and not (isSprinting and isWalkOnWaterActive) then
+			isWalkingOnWater = false
+			if waterPlatform then waterPlatform.CanCollide = false end
+			isGliding = false
+			persistentTrail.Enabled = false
+
+			local isMoving = humanoid.MoveDirection.Magnitude > 0.1
+			if isMoving then
+				playMovementTrack(swimTrack, 0)
+			else
+				if not isHeadInWater() then
+					playMovementTrack(swimIdleTrack, 0)
+				else
+					playMovementTrack(swimTrack, 0)
+				end
+			end
+			return
+		end
+
+		if state == Enum.HumanoidStateType.Climbing then
+			isWalkingOnWater = false
+			if waterPlatform then waterPlatform.CanCollide = false end
+			isGliding = false
+			persistentTrail.Enabled = false
+			
+			local activeClimbTrack = isSprinting and sprintClimbTrack or normalClimbTrack
+			if activeClimbTrack then
+				playMovementTrack(activeClimbTrack, 0.1)
+				if math.abs(rootPart.AssemblyLinearVelocity.Y) > 0.1 then
+					activeClimbTrack:AdjustSpeed(1)
+				else
+					activeClimbTrack:AdjustSpeed(0)
+				end
+			end
+			return
+		end
+
 		if isSprinting and humanoid.MoveDirection.Magnitude > 0.1 then
 			local rayParams = RaycastParams.new()
-			rayParams.FilterDescendantsInstances = {character}
+			local filterInstances = {character}
+			if waterPlatform then table.insert(filterInstances, waterPlatform) end
+			rayParams.FilterDescendantsInstances = filterInstances
 			rayParams.FilterType = Enum.RaycastFilterType.Exclude
-
-			local moveDir = humanoid.MoveDirection
-			local rayResult = workspace:Raycast(rootPart.Position, moveDir * 4.5, rayParams)
-			
+			local rayResult = workspace:Raycast(rootPart.Position, humanoid.MoveDirection * 3.5, rayParams)
 			if rayResult and rayResult.Instance and rayResult.Instance.CanCollide and math.abs(rayResult.Normal.Y) < 0.3 then
 				local currentVel = rootPart.AssemblyLinearVelocity
 				rootPart.AssemblyLinearVelocity = Vector3.new(0, currentVel.Y, 0)
 			end
 		end
 
+		local wallRayHit = false
 		if isSprinting and isWallRunActive then
 			local rayParams = RaycastParams.new()
-			rayParams.FilterDescendantsInstances = {character}
+			local filterInstances = {character}
+			if waterPlatform then table.insert(filterInstances, waterPlatform) end
+			rayParams.FilterDescendantsInstances = filterInstances
 			rayParams.FilterType = Enum.RaycastFilterType.Exclude
-
 			local rayResult = workspace:Raycast(rootPart.Position, rootPart.CFrame.LookVector * 3.5, rayParams)
 			if rayResult and rayResult.Instance and rayResult.Instance.CanCollide and math.abs(rayResult.Normal.Y) < 0.3 then
+				wallRayHit = true
 				if not isWallRunning then
 					isWallRunning = true
 					stopGliding()
 					stopAirAnimations()
-					if sprintClimbTrack then sprintClimbTrack:Play() end
+					if sprintClimbTrack then 
+						stopAllAnimationsExcept(sprintClimbTrack)
+						sprintClimbTrack:Play(0.1) 
+					end
 				end
-				rootPart.AssemblyLinearVelocity = Vector3.new(0, CFG.WallRunSpeed, 0)
+
+				local moveDir = humanoid.MoveDirection
+				local lookVec = rootPart.CFrame.LookVector
+				local moveDot = moveDir:Dot(lookVec)
+
+				local targetYSpeed = 0
+				if moveDir.Magnitude > 0.1 then
+					if moveDot > 0.1 then
+						targetYSpeed = CFG.WallRunSpeed
+						if sprintClimbTrack then sprintClimbTrack:AdjustSpeed(1) end
+					elseif moveDot < -0.1 then
+						targetYSpeed = -CFG.WallRunSpeed * 0.5
+						if sprintClimbTrack then sprintClimbTrack:AdjustSpeed(1) end
+					else
+						targetYSpeed = 0
+						if sprintClimbTrack then sprintClimbTrack:AdjustSpeed(0) end
+					end
+				else
+					targetYSpeed = 0
+					if sprintClimbTrack then sprintClimbTrack:AdjustSpeed(0) end
+				end
+
+				rootPart.AssemblyLinearVelocity = Vector3.new(0, targetYSpeed, 0)
 				return
 			end
 		end
 
-		if isWallRunning then
-			isWallRunning = false
-			humanoid.WalkSpeed = isSprinting and CFG.SprintSpeed or CFG.WalkSpeed
-			stopClimbAnimations()
-		end
-
-		if isSprinting and isWalkOnWaterActive and tick() > waterJumpCooldown then
-			local rayParams = RaycastParams.new()
-			rayParams.FilterDescendantsInstances = {character}
-			rayParams.FilterType = Enum.RaycastFilterType.Exclude
-
-			local rayResult = workspace:Raycast(rootPart.Position + Vector3.new(0, 2, 0), Vector3.new(0, -15, 0), rayParams)
-			if rayResult and rayResult.Instance then
-				local mat = rayResult.Material
-				if mat == Enum.Material.Water or string.find(string.lower(rayResult.Instance.Name), "water") then
-					isWalkingOnWater = true
-					stopGliding()
-					local targetY = rayResult.Position.Y + CFG.WalkOnWaterHeightOffset
-					local curVel = rootPart.AssemblyLinearVelocity
-					rootPart.AssemblyLinearVelocity = Vector3.new(curVel.X, 0, curVel.Z)
-					rootPart.CFrame = CFrame.new(rootPart.Position.X, targetY, rootPart.Position.Z) * rootPart.CFrame.Rotation
-				else
-					isWalkingOnWater = false
-				end
-			else
-				isWalkingOnWater = false
-			end
-		else
-			isWalkingOnWater = false
+		if isWallRunning and not wallRayHit then
+			detachFromWall()
 		end
 
 		if isGliding then
@@ -1016,36 +1040,34 @@ local function setupCustomAnimations(character)
 			end
 		end
 
-		local state = humanoid:GetState()
 		if humanoid.MoveDirection.Magnitude <= 0.1 and not isGliding and not isWalkingOnWater and (state == Enum.HumanoidStateType.Running or state == Enum.HumanoidStateType.RunningNoPhysics) then
 			rootPart.AssemblyLinearVelocity = Vector3.new(0, rootPart.AssemblyLinearVelocity.Y, 0)
 		end
 
-		-- Handle normal ground + water walking animations
-		if (state ~= Enum.HumanoidStateType.Freefall and state ~= Enum.HumanoidStateType.Jumping and not isWallRunning) or isWalkingOnWater then
-			isFalling = false
+		if (state == Enum.HumanoidStateType.Running or state == Enum.HumanoidStateType.RunningNoPhysics or state == Enum.HumanoidStateType.Landed) and math.abs(rootPart.AssemblyLinearVelocity.Y) < 1.5 then
 			isJumping = false
-			
+			isFalling = false
+		end
+
+		if (state ~= Enum.HumanoidStateType.Freefall and state ~= Enum.HumanoidStateType.Jumping and state ~= Enum.HumanoidStateType.Swimming and state ~= Enum.HumanoidStateType.Climbing and not isWallRunning and not isJumping and not isFalling) or isWalkingOnWater then
 			if humanoid.MoveDirection.Magnitude > 0.1 then
-				if isSprinting then
-					playMovementTrack(runTrack)
-				else
-					playMovementTrack(walkTrack)
-				end
+				playMovementTrack(isSprinting and runTrack or walkTrack, 0.1)
 			else
-				playMovementTrack(idleTrack)
+				playMovementTrack(idleTrack, 0.1)
 			end
 		end
 
-		if state == Enum.HumanoidStateType.Freefall and not isWalkingOnWater then
+		if (state == Enum.HumanoidStateType.Freefall or rootPart.AssemblyLinearVelocity.Y < -5) and not isWalkingOnWater and not isGrounded() then
 			if not isFalling then
 				isFalling = true
 				isJumping = false
 				stopAirAnimations()
-				if isSprinting then
-					if sprintFallTrack then sprintFallTrack:Play() end
-				else
-					if normalFallTrack then normalFallTrack:Play() end
+				if isSprinting and sprintFallTrack then 
+					stopAllAnimationsExcept(sprintFallTrack)
+					sprintFallTrack:Play(0.1)
+				elseif normalFallTrack then 
+					stopAllAnimationsExcept(normalFallTrack)
+					normalFallTrack:Play(0.1) 
 				end
 			end
 			if isSprinting and isGlideActive and not isGliding and rootPart.AssemblyLinearVelocity.Y <= 2 then
@@ -1055,24 +1077,57 @@ local function setupCustomAnimations(character)
 	end)
 
 	humanoid.StateChanged:Connect(function(oldState, newState)
-		if newState == Enum.HumanoidStateType.Jumping then
-			isJumping = true; isFalling = false; stopGliding(); isWalkingOnWater = false
-			waterJumpCooldown = tick() + 0.35
+		if newState == Enum.HumanoidStateType.Climbing then
+			stopGliding()
+			isWalkingOnWater = false
+			if waterPlatform then waterPlatform.CanCollide = false end
 			stopAirAnimations()
-			if isSprinting then
-				if sprintJumpTrack then sprintJumpTrack:Play() end
+			playMovementTrack(isSprinting and sprintClimbTrack or normalClimbTrack, 0.1)
+		elseif newState == Enum.HumanoidStateType.Swimming then
+			if isSprinting and isWalkOnWaterActive and not isHeadInWater() then
+				humanoid:ChangeState(Enum.HumanoidStateType.Running)
 			else
-				if normalJumpTrack then normalJumpTrack:Play() end
+				isWalkingOnWater = false
+				if waterPlatform then waterPlatform.CanCollide = false end
+				stopGliding()
+				stopAirAnimations()
+				if humanoid.MoveDirection.Magnitude > 0.1 then
+					playMovementTrack(swimTrack, 0)
+				else
+					if not isHeadInWater() then
+						playMovementTrack(swimIdleTrack, 0)
+					else
+						playMovementTrack(swimTrack, 0)
+					end
+				end
 			end
-		elseif newState == Enum.HumanoidStateType.Landed then
+		elseif newState == Enum.HumanoidStateType.Jumping then
+			isJumping = true; isFalling = false; stopGliding(); isWalkingOnWater = false; if waterPlatform then waterPlatform.CanCollide = false end
+			waterJumpCooldown = tick() + 0.5
+			stopAirAnimations()
+			if isSprinting and sprintJumpTrack then 
+				stopAllAnimationsExcept(sprintJumpTrack)
+				sprintJumpTrack:Play(0.1)
+			elseif normalJumpTrack then 
+				stopAllAnimationsExcept(normalJumpTrack)
+				normalJumpTrack:Play(0.1) 
+			end
+		elseif newState == Enum.HumanoidStateType.Landed or newState == Enum.HumanoidStateType.Running then
 			isJumping = false; isFalling = false; stopGliding(); stopAirAnimations()
+			if humanoid.MoveDirection.Magnitude > 0.1 then
+				playMovementTrack(isSprinting and runTrack or walkTrack, 0.1)
+			else
+				playMovementTrack(idleTrack, 0.1)
+			end
 		end
 	end)
 
-	playMovementTrack(idleTrack)
+	playMovementTrack(idleTrack, 0.1)
 
 	humanoid.Died:Connect(function()
 		if speedLockConn then speedLockConn:Disconnect() end
+		if jumpReqConn then jumpReqConn:Disconnect() end
+		if waterPlatform then waterPlatform:Destroy() end
 		stopGliding()
 		setAntiFlingState(false)
 		setNoclipState(false)
