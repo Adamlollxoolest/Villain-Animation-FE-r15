@@ -102,7 +102,6 @@ local function setShiftlockState(state)
 			end
 		end)
 	else
-		-- Only destroy the exact elements that were spawned/tracked during the INF-HH script injection
 		for _, item in ipairs(trackedINFHHItems) do
 			if item and item.Parent then
 				pcall(function() item:Destroy() end)
@@ -110,6 +109,43 @@ local function setShiftlockState(state)
 		end
 		trackedINFHHItems = {}
 	end
+end
+
+local function makeSingleFingerDraggable(guiObject)
+	local dragging = false
+	local dragInput, dragStart, startPos
+
+	guiObject.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = guiObject.Position
+			
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+
+	guiObject.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			local delta = input.Position - dragStart
+			guiObject.Position = UDim2.new(
+				startPos.X.Scale, 
+				startPos.X.Offset + delta.X, 
+				startPos.Y.Scale, 
+				startPos.Y.Offset + delta.Y
+			)
+		end
+	end)
 end
 
 local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, setWaterWalkToggleCallback, updateSpeedCallback, updateJumpCallback)
@@ -132,12 +168,13 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 		button.Font = Enum.Font.SourceSansBold
 		button.Text = text
 		button.Active = true
-		button.Draggable = true
 		button.Parent = screenGui
 
 		local uiCorner = Instance.new("UICorner")
 		uiCorner.CornerRadius = UDim.new(0, 10)
 		uiCorner.Parent = button
+
+		makeSingleFingerDraggable(button)
 		return button
 	end
 
@@ -160,33 +197,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 	frameCorner.CornerRadius = UDim.new(0, 10)
 	frameCorner.Parent = cfgFrame
 
-	local dragging, dragInput, dragStart, startPos
-	cfgFrame.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			local target = input.Target
-			if target == cfgFrame then
-				dragging = true
-				dragStart = input.Position
-				startPos = cfgFrame.Position
-				input.Changed:Connect(function()
-					if input.UserInputState == Enum.UserInputState.End then dragging = false end
-				end)
-			end
-		end
-	end)
-
-	cfgFrame.InputChanged:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-			dragInput = input
-		end
-	end)
-
-	UserInputService.InputChanged:Connect(function(input)
-		if input == dragInput and dragging then
-			local delta = input.Position - dragStart
-			cfgFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-		end
-	end)
+	makeSingleFingerDraggable(cfgFrame)
 
 	local function createCFGInput(labelText, defaultVal, posY, callback)
 		local label = Instance.new("TextLabel")
@@ -328,6 +339,8 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 	local ctCorner = Instance.new("UICorner")
 	ctCorner.CornerRadius = UDim.new(0, 10)
 	ctCorner.Parent = colorTrailFrame
+
+	makeSingleFingerDraggable(colorTrailFrame)
 
 	local ctTitle = Instance.new("TextLabel")
 	ctTitle.Size = UDim2.new(1, 0, 0, 30)
