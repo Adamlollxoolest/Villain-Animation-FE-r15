@@ -26,12 +26,21 @@ local CFG = {
 	GlideFallSpeed = -5,
 	GlideForwardMultiplier = 1.2,
 
+	-- Walk on Water Settings
+	WalkOnWaterHeightOffset = 0.5,
+
+	-- Trail Color Settings (Default: Cyan/Blue)
+	TrailColorR = 200,
+	TrailColorG = 220,
+	TrailColorB = 255,
+
 	-- Execution & Trigger Automation Flags
 	AutoAntiFlingOnExec = false,
 	AutoSprintOnExec = false,
 	AutoNoclipOnExec = false,
 	AutoGlideOnSprint = false,
 	AutoWallRunOnSprint = false,
+	AutoWalkOnWaterOnSprint = false,
 	Shiftlock = false
 }
 
@@ -130,7 +139,7 @@ local function setShiftlockState(state)
 end
 
 -- Mobile UI Setup
-local function createMobileUI(setNoclipStateCallback)
+local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback)
 	local existingGui = playerGui:FindFirstChild("MobileControlGui")
 	if existingGui then existingGui:Destroy() end
 
@@ -166,9 +175,10 @@ local function createMobileUI(setNoclipStateCallback)
 	local glideBtn = makeButton("GlideButton", "Glide: OFF", UDim2.new(0, 20, 0, 170), Color3.fromRGB(220, 50, 50))
 	local cfgBtn = makeButton("CFGButton", "CFG Menu", UDim2.new(0, 20, 0, 220), Color3.fromRGB(100, 100, 100))
 	
+	-- Expanded CFG Frame height to prevent overlapping elements
 	local cfgFrame = Instance.new("Frame")
 	cfgFrame.Name = "CFGFrame"
-	cfgFrame.Size = UDim2.new(0, 280, 0, 465)
+	cfgFrame.Size = UDim2.new(0, 280, 0, 535)
 	cfgFrame.Position = UDim2.new(0, 160, 0, 20)
 	cfgFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 	cfgFrame.Visible = false
@@ -315,17 +325,297 @@ local function createMobileUI(setNoclipStateCallback)
 	createCFGInput("Wall Speed:", CFG.WallRunSpeed, 80, function(val) CFG.WallRunSpeed = val end)
 	createCFGInput("Glide Base (s):", CFG.BaseGlideDuration, 115, function(val) CFG.BaseGlideDuration = val end)
 	createCFGInput("Glide Max (s):", CFG.MaxGlideDuration, 150, function(val) CFG.MaxGlideDuration = val end)
+	createCFGInput("Water Offset:", CFG.WalkOnWaterHeightOffset, 185, function(val) CFG.WalkOnWaterHeightOffset = val end)
 
-	local setNoclipUI = createCFGToggle("Noclip Toggle:", CFG.AutoNoclipOnExec, 190, function(state)
+	local setNoclipUI = createCFGToggle("Noclip Toggle:", CFG.AutoNoclipOnExec, 225, function(state)
 		CFG.AutoNoclipOnExec = state
 		setNoclipStateCallback(state)
 	end)
 
-	createCFGToggle("Anti Fling (Exec On):", CFG.AutoAntiFlingOnExec, 225, function(state) CFG.AutoAntiFlingOnExec = state end)
-	createCFGToggle("Sprint (Exec On):", CFG.AutoSprintOnExec, 260, function(state) CFG.AutoSprintOnExec = state end)
-	createCFGToggle("Glide (On Sprint):", CFG.AutoGlideOnSprint, 295, function(state) CFG.AutoGlideOnSprint = state end)
-	createCFGToggle("Wall Run (On Sprint):", CFG.AutoWallRunOnSprint, 330, function(state) CFG.AutoWallRunOnSprint = state end)
-	createCFGToggle("Shiftlock:", CFG.Shiftlock, 365, function(state) setShiftlockState(state) end)
+	createCFGToggle("Anti Fling (Exec On):", CFG.AutoAntiFlingOnExec, 260, function(state) CFG.AutoAntiFlingOnExec = state end)
+	createCFGToggle("Sprint (Exec On):", CFG.AutoSprintOnExec, 295, function(state) CFG.AutoSprintOnExec = state end)
+	createCFGToggle("Glide (On Sprint):", CFG.AutoGlideOnSprint, 330, function(state) CFG.AutoGlideOnSprint = state end)
+	createCFGToggle("Wall Run (On Sprint):", CFG.AutoWallRunOnSprint, 365, function(state) CFG.AutoWallRunOnSprint = state end)
+	createCFGToggle("Water Walk (On Sprint):", CFG.AutoWalkOnWaterOnSprint, 400, function(state) CFG.AutoWalkOnWaterOnSprint = state end)
+	createCFGToggle("Shiftlock:", CFG.Shiftlock, 435, function(state) setShiftlockState(state) end)
+
+	-- ==========================================
+	-- SECOND MENU: COLOR TRAIL WINDOW
+	-- ==========================================
+	local colorTrailFrame = Instance.new("Frame")
+	colorTrailFrame.Name = "ColorTrailFrame"
+	colorTrailFrame.Size = UDim2.new(0, 260, 0, 275)
+	colorTrailFrame.Position = UDim2.new(0, 460, 0, 20)
+	colorTrailFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	colorTrailFrame.Visible = false
+	colorTrailFrame.Active = true
+	colorTrailFrame.Parent = screenGui
+
+	local ctCorner = Instance.new("UICorner")
+	ctCorner.CornerRadius = UDim.new(0, 10)
+	ctCorner.Parent = colorTrailFrame
+
+	local ctTitle = Instance.new("TextLabel")
+	ctTitle.Size = UDim2.new(1, 0, 0, 30)
+	ctTitle.BackgroundTransparency = 1
+	ctTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+	ctTitle.Text = "Trail Color Customizer"
+	ctTitle.Font = Enum.Font.SourceSansBold
+	ctTitle.TextSize = 16
+	ctTitle.Parent = colorTrailFrame
+
+	-- Make Color Trail Menu Draggable
+	local ctDragging, ctDragInput, ctDragStart, ctStartPos
+	colorTrailFrame.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			ctDragging = true
+			ctDragStart = input.Position
+			ctStartPos = colorTrailFrame.Position
+
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					ctDragging = false
+				end
+			end)
+		end
+	end)
+
+	colorTrailFrame.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			ctDragInput = input
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if input == ctDragInput and ctDragging then
+			local delta = input.Position - ctDragStart
+			colorTrailFrame.Position = UDim2.new(ctStartPos.X.Scale, ctStartPos.X.Offset + delta.X, ctStartPos.Y.Scale, ctStartPos.Y.Offset + delta.Y)
+		end
+	end)
+
+	local pickerBox = Instance.new("TextButton")
+	pickerBox.Size = UDim2.new(0, 240, 0, 80)
+	pickerBox.Position = UDim2.new(0, 10, 0, 38)
+	pickerBox.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	pickerBox.AutoButtonColor = false
+	pickerBox.Text = ""
+	pickerBox.Parent = colorTrailFrame
+
+	local pbCorner = Instance.new("UICorner")
+	pbCorner.CornerRadius = UDim.new(0, 6)
+	pbCorner.Parent = pickerBox
+
+	local pickerGradient = Instance.new("UIGradient")
+	pickerGradient.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
+		ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 255, 0)),
+		ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
+		ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0, 255, 255)),
+		ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0, 0, 255)),
+		ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
+		ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0))
+	})
+	pickerGradient.Parent = pickerBox
+
+	local overlayGradient = Instance.new("Frame")
+	overlayGradient.Size = UDim2.new(1, 0, 1, 0)
+	overlayGradient.BackgroundTransparency = 0
+	overlayGradient.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	overlayGradient.Parent = pickerBox
+
+	local ogCorner = Instance.new("UICorner")
+	ogCorner.CornerRadius = UDim.new(0, 6)
+	ogCorner.Parent = overlayGradient
+
+	local ogGrad = Instance.new("UIGradient")
+	ogGrad.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(1, 0)
+	})
+	ogGrad.Rotation = 90
+	ogGrad.Parent = overlayGradient
+
+	local selectorCircle = Instance.new("Frame")
+	selectorCircle.Size = UDim2.new(0, 14, 0, 14)
+	selectorCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+	selectorCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
+	selectorCircle.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	selectorCircle.BorderSizePixel = 2
+	selectorCircle.BorderColor3 = Color3.fromRGB(0, 0, 0)
+	selectorCircle.Parent = pickerBox
+
+	local scCorner = Instance.new("UICorner")
+	scCorner.CornerRadius = UDim.new(1, 0)
+	scCorner.Parent = selectorCircle
+
+	local rgbLabel = Instance.new("TextLabel")
+	rgbLabel.Size = UDim2.new(0, 100, 0, 25)
+	rgbLabel.Position = UDim2.new(0, 10, 0, 126)
+	rgbLabel.BackgroundTransparency = 1
+	rgbLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	rgbLabel.Text = "RGB:"
+	rgbLabel.Font = Enum.Font.SourceSans
+	rgbLabel.TextSize = 14
+	rgbLabel.TextXAlignment = Enum.TextXAlignment.Left
+	rgbLabel.Parent = colorTrailFrame
+
+	local rgbBox = Instance.new("TextBox")
+	rgbBox.Size = UDim2.new(0, 130, 0, 25)
+	rgbBox.Position = UDim2.new(0, 120, 0, 126)
+	rgbBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	rgbBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+	rgbBox.Text = string.format("%d,%d,%d", CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
+	rgbBox.Font = Enum.Font.SourceSansBold
+	rgbBox.TextSize = 13
+	rgbBox.Parent = colorTrailFrame
+
+	local rgbCorner = Instance.new("UICorner")
+	rgbCorner.CornerRadius = UDim.new(0, 6)
+	rgbCorner.Parent = rgbBox
+
+	local hexLabel = Instance.new("TextLabel")
+	hexLabel.Size = UDim2.new(0, 100, 0, 25)
+	hexLabel.Position = UDim2.new(0, 10, 0, 157)
+	hexLabel.BackgroundTransparency = 1
+	hexLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	hexLabel.Text = "HEX:"
+	hexLabel.Font = Enum.Font.SourceSans
+	hexLabel.TextSize = 14
+	hexLabel.TextXAlignment = Enum.TextXAlignment.Left
+	hexLabel.Parent = colorTrailFrame
+
+	local hexBox = Instance.new("TextBox")
+	hexBox.Size = UDim2.new(0, 130, 0, 25)
+	hexBox.Position = UDim2.new(0, 120, 0, 157)
+	hexBox.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	hexBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+	hexBox.Text = string.format("#%02X%02X%02X", CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
+	hexBox.Font = Enum.Font.SourceSansBold
+	hexBox.TextSize = 13
+	hexBox.Parent = colorTrailFrame
+
+	local hexCorner = Instance.new("UICorner")
+	hexCorner.CornerRadius = UDim.new(0, 6)
+	hexCorner.Parent = hexBox
+
+	local function applyColorValues(r, g, b)
+		CFG.TrailColorR = math.clamp(math.floor(r), 0, 255)
+		CFG.TrailColorG = math.clamp(math.floor(g), 0, 255)
+		CFG.TrailColorB = math.clamp(math.floor(b), 0, 255)
+		
+		rgbBox.Text = string.format("%d,%d,%d", CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
+		hexBox.Text = string.format("#%02X%02X%02X", CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
+		
+		updateTrailColorCallback(CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
+		saveCFG()
+	end
+
+	local pickingColor = false
+	local function updateColorFromInput(inputPos)
+		local absPos = pickerBox.AbsolutePosition
+		local absSize = pickerBox.AbsoluteSize
+		
+		local relX = math.clamp((inputPos.X - absPos.X) / absSize.X, 0, 1)
+		local relY = math.clamp((inputPos.Y - absPos.Y) / absSize.Y, 0, 1)
+		
+		selectorCircle.Position = UDim2.new(relX, 0, relY, 0)
+		
+		local hue = relX
+		local saturation = 1 - (relY * 0.5)
+		local value = 1 - relY
+		
+		local rgbColor = Color3.fromHSV(hue, saturation, value)
+		applyColorValues(rgbColor.R * 255, rgbColor.G * 255, rgbColor.B * 255)
+	end
+
+	pickerBox.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			pickingColor = true
+			updateColorFromInput(input.Position)
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if pickingColor and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			updateColorFromInput(input.Position)
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			pickingColor = false
+		end
+	end)
+
+	local function makePresetBtn(name, colorName, colorVal, posX, posY)
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(0, 72, 0, 26)
+		btn.Position = UDim2.new(0, posX, 0, posY)
+		btn.BackgroundColor3 = colorVal
+		btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		btn.Text = colorName
+		btn.Font = Enum.Font.SourceSansBold
+		btn.TextSize = 11
+		btn.Parent = colorTrailFrame
+
+		local bc = Instance.new("UICorner")
+		bc.CornerRadius = UDim.new(0, 6)
+		bc.Parent = btn
+
+		btn.MouseButton1Click:Connect(function()
+			applyColorValues(colorVal.R * 255, colorVal.G * 255, colorVal.B * 255)
+		end)
+	end
+
+	makePresetBtn("RedPreset", "Red", Color3.fromRGB(255, 0, 0), 10, 190)
+	makePresetBtn("GreenPreset", "Green", Color3.fromRGB(0, 255, 0), 94, 190)
+	makePresetBtn("BluePreset", "Blue", Color3.fromRGB(0, 120, 255), 178, 190)
+	makePresetBtn("WhitePreset", "White", Color3.fromRGB(255, 255, 255), 10, 225)
+	makePresetBtn("DarkBluePreset", "Dark Blue", Color3.fromRGB(0, 0, 139), 94, 225)
+
+	rgbBox.FocusLost:Connect(function()
+		local r, g, b = rgbBox.Text:match("([^,]+),([^,]+),([^,]+)")
+		r, g, b = tonumber(r), tonumber(g), tonumber(b)
+		if r and g and b then
+			applyColorValues(r, g, b)
+		else
+			rgbBox.Text = string.format("%d,%d,%d", CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
+		end
+	end)
+
+	hexBox.FocusLost:Connect(function()
+		local hex = hexBox.Text:gsub("#", "")
+		if #hex == 6 then
+			local r = tonumber("0x" .. hex:sub(1, 2))
+			local g = tonumber("0x" .. hex:sub(3, 4))
+			local b = tonumber("0x" .. hex:sub(5, 6))
+			if r and g and b then
+				applyColorValues(r, g, b)
+			else
+				hexBox.Text = string.format("#%02X%02X%02X", CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
+			end
+		else
+			hexBox.Text = string.format("#%02X%02X%02X", CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
+		end
+	end)
+
+	local colorTrailMenuBtn = Instance.new("TextButton")
+	colorTrailMenuBtn.Size = UDim2.new(0, 260, 0, 32)
+	colorTrailMenuBtn.Position = UDim2.new(0, 10, 0, 485)
+	colorTrailMenuBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+	colorTrailMenuBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	colorTrailMenuBtn.Text = "Color Trail Settings"
+	colorTrailMenuBtn.Font = Enum.Font.SourceSansBold
+	colorTrailMenuBtn.TextSize = 14
+	colorTrailMenuBtn.Parent = cfgFrame
+
+	local ctmCorner = Instance.new("UICorner")
+	ctmCorner.CornerRadius = UDim.new(0, 6)
+	ctmCorner.Parent = colorTrailMenuBtn
+
+	colorTrailMenuBtn.MouseButton1Click:Connect(function()
+		colorTrailFrame.Visible = not colorTrailFrame.Visible
+	end)
 
 	cfgBtn.MouseButton1Click:Connect(function()
 		cfgFrame.Visible = not cfgFrame.Visible
@@ -340,6 +630,8 @@ end
 local function setupCustomAnimations(character)
 	local humanoid = character:WaitForChild("Humanoid")
 	local rootPart = character:WaitForChild("HumanoidRootPart")
+	
+	local torsoPart = character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or rootPart
 	
 	for _, child in ipairs(character:GetChildren()) do
 		if child:IsA("LocalScript") and (child.Name == "Animate" or child.Name == "AnimationScript") then
@@ -392,6 +684,7 @@ local function setupCustomAnimations(character)
 
 	local isFalling, isJumping, isSprinting = false, false, false
 	local isWallRunning, isWallRunActive, isGlideActive, isGliding, isAntiFlingActive = false, false, false, false, false
+	local isWalkOnWaterActive, isWalkingOnWater = false, false
 	
 	local glideStartTime = 0
 	local calculatedGlideDuration = CFG.BaseGlideDuration
@@ -400,23 +693,35 @@ local function setupCustomAnimations(character)
 	local currentMovementTrack = nil
 
 	local att0 = Instance.new("Attachment")
-	att0.Position = Vector3.new(0, 1, 0)
-	att0.Parent = rootPart
+	att0.Position = Vector3.new(0, 0.7, 0.5)
+	att0.Parent = torsoPart
 
 	local att1 = Instance.new("Attachment")
-	att1.Position = Vector3.new(0, -1, 0)
-	att1.Parent = rootPart
+	att1.Position = Vector3.new(0, -0.5, 0.6)
+	att1.Parent = torsoPart
 
 	local persistentTrail = Instance.new("Trail")
 	persistentTrail.Attachment0 = att0
 	persistentTrail.Attachment1 = att1
-	persistentTrail.Lifetime = 0.5
+	persistentTrail.Lifetime = 0.4
 	persistentTrail.MinLength = 0.05
-	persistentTrail.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(255, 255, 255))
+	
+	persistentTrail.WidthScale = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1.2),
+		NumberSequenceKeypoint.new(1, 0.0)
+	})
+	
+	local function updateTrailColor(r, g, b)
+		local baseColor = Color3.fromRGB(r, g, b)
+		persistentTrail.Color = ColorSequence.new(baseColor, Color3.fromRGB(math.clamp(r+50,0,255), math.clamp(g+50,0,255), math.clamp(b+50,0,255)))
+	end
+
+	updateTrailColor(CFG.TrailColorR, CFG.TrailColorG, CFG.TrailColorB)
+
 	persistentTrail.Transparency = NumberSequence.new(0.05, 1)
 	persistentTrail.LightEmission = 1
 	persistentTrail.Enabled = false
-	persistentTrail.Parent = rootPart
+	persistentTrail.Parent = torsoPart
 
 	local function playMovementTrack(track)
 		if not track then return end
@@ -530,7 +835,7 @@ local function setupCustomAnimations(character)
 		end
 	end
 
-	local sprintBtn, antiFlingBtn, wallRunBtn, glideBtn, updateNoclipUI = createMobileUI(setNoclipState)
+	local sprintBtn, antiFlingBtn, wallRunBtn, glideBtn, updateNoclipUI = createMobileUI(setNoclipState, updateTrailColor)
 
 	local function toggleSprint(enable)
 		isSprinting = enable
@@ -552,12 +857,15 @@ local function setupCustomAnimations(character)
 			sprintBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
 			if CFG.AutoGlideOnSprint then isGlideActive = true; glideBtn.Text = "Glide: ON"; glideBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50) end
 			if CFG.AutoWallRunOnSprint then isWallRunActive = true; wallRunBtn.Text = "Wall Run: ON"; wallRunBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50) end
+			if CFG.AutoWalkOnWaterOnSprint then isWalkOnWaterActive = true end
 		else
 			sprintBtn.Text = "Sprint: OFF"
 			sprintBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
 			isWallRunActive = false
 			isWallRunning = false
 			isGlideActive = false
+			isWalkOnWaterActive = false
+			isWalkingOnWater = false
 			stopGliding()
 			wallRunBtn.Text = "Wall Run: OFF"; wallRunBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
 			glideBtn.Text = "Glide: OFF"; glideBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
@@ -613,21 +921,19 @@ local function setupCustomAnimations(character)
 		if CFG.AutoSprintOnExec then toggleSprint(true) end
 		if CFG.AutoNoclipOnExec then setNoclipState(true) end
 		if CFG.Shiftlock then setShiftlockState(true) end
+		if CFG.AutoWalkOnWaterOnSprint then isWalkOnWaterActive = true end
 	end)
 
 	renderConn = RunService.RenderStepped:Connect(function()
-		-- Predictive Wall Crash Check: Catches solid walls right before impact, stopping the physical fling without slowing normal movement
 		if isSprinting and humanoid.MoveDirection.Magnitude > 0.1 then
 			local rayParams = RaycastParams.new()
 			rayParams.FilterDescendantsInstances = {character}
 			rayParams.FilterType = Enum.RaycastFilterType.Exclude
 
-			-- Cast a short feeler in the exact direction the player is moving
 			local moveDir = humanoid.MoveDirection
 			local rayResult = workspace:Raycast(rootPart.Position, moveDir * 4.5, rayParams)
 			
 			if rayResult and rayResult.Instance and rayResult.Instance.CanCollide and math.abs(rayResult.Normal.Y) < 0.3 then
-				-- Instantly strip momentum vectors that point directly into the obstacle
 				local currentVel = rootPart.AssemblyLinearVelocity
 				rootPart.AssemblyLinearVelocity = Vector3.new(0, currentVel.Y, 0)
 			end
@@ -657,6 +963,31 @@ local function setupCustomAnimations(character)
 			stopClimbAnimations()
 		end
 
+		if isSprinting and isWalkOnWaterActive then
+			local rayParams = RaycastParams.new()
+			rayParams.FilterDescendantsInstances = {character}
+			rayParams.FilterType = Enum.RaycastFilterType.Exclude
+
+			local rayResult = workspace:Raycast(rootPart.Position + Vector3.new(0, 2, 0), Vector3.new(0, -15, 0), rayParams)
+			if rayResult and rayResult.Instance then
+				local mat = rayResult.Material
+				if mat == Enum.Material.Water or string.find(string.lower(rayResult.Instance.Name), "water") then
+					isWalkingOnWater = true
+					stopGliding()
+					local targetY = rayResult.Position.Y + CFG.WalkOnWaterHeightOffset
+					local curVel = rootPart.AssemblyLinearVelocity
+					rootPart.AssemblyLinearVelocity = Vector3.new(curVel.X, 0, curVel.Z)
+					rootPart.CFrame = CFrame.new(rootPart.Position.X, targetY, rootPart.Position.Z) * rootPart.CFrame.Rotation
+				else
+					isWalkingOnWater = false
+				end
+			else
+				isWalkingOnWater = false
+			end
+		else
+			isWalkingOnWater = false
+		end
+
 		if isGliding then
 			if (tick() - glideStartTime) > calculatedGlideDuration then
 				stopGliding()
@@ -671,11 +1002,11 @@ local function setupCustomAnimations(character)
 		end
 
 		local state = humanoid:GetState()
-		if humanoid.MoveDirection.Magnitude <= 0.1 and not isGliding and (state == Enum.HumanoidStateType.Running or state == Enum.HumanoidStateType.RunningNoPhysics) then
+		if humanoid.MoveDirection.Magnitude <= 0.1 and not isGliding and not isWalkingOnWater and (state == Enum.HumanoidStateType.Running or state == Enum.HumanoidStateType.RunningNoPhysics) then
 			rootPart.AssemblyLinearVelocity = Vector3.new(0, rootPart.AssemblyLinearVelocity.Y, 0)
 		end
 
-		if state ~= Enum.HumanoidStateType.Freefall and state ~= Enum.HumanoidStateType.Jumping and not isWallRunning then
+		if state ~= Enum.HumanoidStateType.Freefall and state ~= Enum.HumanoidStateType.Jumping and not isWallRunning and not isWalkingOnWater then
 			isFalling = false
 			isJumping = false
 			
@@ -690,7 +1021,7 @@ local function setupCustomAnimations(character)
 			end
 		end
 
-		if state == Enum.HumanoidStateType.Freefall then
+		if state == Enum.HumanoidStateType.Freefall and not isWalkingOnWater then
 			if not isFalling then
 				isFalling = true
 				isJumping = false
