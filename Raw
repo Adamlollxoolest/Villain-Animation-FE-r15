@@ -4,6 +4,7 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -15,7 +16,7 @@ local CFG = {
 	SprintSpeed = 235,
 	WallRunSpeed = 200,
 	JumpPower = 80,
-	FlySpeed = 200, -- Adjusted speed safe for NDS bypass
+	FlySpeed = 200,
 	
 	BaseGlideDuration = 1.0,
 	HeightBonusFactor = 0.05,
@@ -35,11 +36,15 @@ local CFG = {
 	AutoGlideOnSprint = false,
 	AutoWallRunOnSprint = false,
 	AutoWalkOnWaterOnSprint = false,
+	SlowFallingActive = false,
+	SlowFallingFallSpeed = -4,
+	GodModeActive = false,
 	Shiftlock = false
 }
 
 local isNoclipActive = false
 local trackedINFHHItems = {}
+local loadedGodModeObjects = {}
 
 local function saveCFG()
 	if writefile then
@@ -132,7 +137,7 @@ local function setShiftlockState(state)
 		local function deepClean(parent)
 			for _, child in ipairs(parent:GetChildren()) do
 				local nameLower = string.lower(child.Name)
-				if string.find(nameLower, "shiftlock") or string.find(nameLower, "mouselock") or string.find(nameLower, "cursor") then
+				if (string.find(nameLower, "shiftlock") or string.find(nameLower, "mouselock") or string.find(nameLower, "cursor")) and nameLower ~= "touchgui" and nameLower ~= "mobilecontrolgui" then
 					pcall(function() child:Destroy() end)
 				else
 					deepClean(child)
@@ -181,6 +186,47 @@ local function makeSingleFingerDraggable(guiObject)
 	end)
 end
 
+local function setGodModeState(state)
+	CFG.GodModeActive = state
+	saveCFG()
+
+	if state then
+		local function trackGodGui(container)
+			container.ChildAdded:Connect(function(child)
+				if child:IsA("ScreenGui") then
+					table.insert(loadedGodModeObjects, child)
+				end
+			end)
+		end
+		trackGodGui(playerGui)
+		pcall(function() trackGodGui(CoreGui) end)
+
+		pcall(function()
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/Adamlollxoolest/Adam-made-this-god-mode-script-lolololol/refs/heads/main/God%20mode%20script%20made%20by%20admmmo6"))()
+		end)
+	else
+		for _, gui in ipairs(loadedGodModeObjects) do
+			if gui and gui.Parent then
+				pcall(function() gui:Destroy() end)
+			end
+		end
+		loadedGodModeObjects = {}
+
+		local function cleanupGod(parent)
+			for _, child in ipairs(parent:GetChildren()) do
+				local nameLower = string.lower(child.Name)
+				if (string.find(nameLower, "god") or string.find(nameLower, "adam")) and nameLower ~= "touchgui" and nameLower ~= "mobilecontrolgui" then
+					pcall(function() child:Destroy() end)
+				else
+					cleanupGod(child)
+				end
+			end
+		end
+		pcall(function() cleanupGod(playerGui) end)
+		pcall(function() cleanupGod(CoreGui) end)
+	end
+end
+
 local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, setWaterWalkToggleCallback, updateSpeedCallback, updateJumpCallback)
 	local existingGui = playerGui:FindFirstChild("MobileControlGui")
 	if existingGui then existingGui:Destroy() end
@@ -220,7 +266,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 	
 	local cfgFrame = Instance.new("Frame")
 	cfgFrame.Name = "CFGFrame"
-	cfgFrame.Size = UDim2.new(0, 280, 0, 570)
+	cfgFrame.Size = UDim2.new(0, 280, 0, 630)
 	cfgFrame.Position = UDim2.new(0, 160, 0, 20)
 	cfgFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 	cfgFrame.Visible = false
@@ -343,23 +389,29 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 	createCFGInput("Wall Speed:", CFG.WallRunSpeed, 115, function(val) CFG.WallRunSpeed = val end)
 	createCFGInput("Glide Base (s):", CFG.BaseGlideDuration, 150, function(val) CFG.BaseGlideDuration = val end)
 	createCFGInput("Water Offset:", CFG.WalkOnWaterHeightOffset, 185, function(val) CFG.WalkOnWaterHeightOffset = val end)
+	createCFGInput("Slow Fall Speed:", CFG.SlowFallingFallSpeed, 220, function(val) CFG.SlowFallingFallSpeed = val end)
 
-	local setNoclipUI = createCFGToggle("Noclip Toggle:", CFG.AutoNoclipOnExec, 225, function(state)
+	local setNoclipUI = createCFGToggle("Noclip Toggle:", CFG.AutoNoclipOnExec, 260, function(state)
 		CFG.AutoNoclipOnExec = state
 		setNoclipStateCallback(state)
 	end)
 
-	createCFGToggle("Anti Fling (Exec On):", CFG.AutoAntiFlingOnExec, 260, function(state) CFG.AutoAntiFlingOnExec = state end)
-	createCFGToggle("Sprint (Exec On):", CFG.AutoSprintOnExec, 295, function(state) CFG.AutoSprintOnExec = state end)
-	createCFGToggle("Glide (On Sprint):", CFG.AutoGlideOnSprint, 330, function(state) CFG.AutoGlideOnSprint = state end)
-	createCFGToggle("Wall Run (On Sprint):", CFG.AutoWallRunOnSprint, 365, function(state) CFG.AutoWallRunOnSprint = state end)
+	createCFGToggle("Anti Fling (Exec On):", CFG.AutoAntiFlingOnExec, 295, function(state) CFG.AntiFlingOnExec = state end)
+	createCFGToggle("Sprint (Exec On):", CFG.AutoSprintOnExec, 330, function(state) CFG.AutoSprintOnExec = state end)
+	createCFGToggle("Glide (On Sprint):", CFG.AutoGlideOnSprint, 365, function(state) CFG.AutoGlideOnSprint = state end)
+	createCFGToggle("Wall Run (On Sprint):", CFG.AutoWallRunOnSprint, 400, function(state) CFG.AutoWallRunOnSprint = state end)
 	
-	createCFGToggle("Water Walk (On Sprint):", CFG.AutoWalkOnWaterOnSprint, 400, function(state) 
+	createCFGToggle("Water Walk (On Sprint):", CFG.AutoWalkOnWaterOnSprint, 435, function(state) 
 		CFG.AutoWalkOnWaterOnSprint = state 
 		setWaterWalkToggleCallback(state)
 	end)
 
-	createCFGToggle("Shiftlock:", CFG.Shiftlock, 435, function(state) setShiftlockState(state) end)
+	createCFGToggle("Slow Falling:", CFG.SlowFallingActive, 470, function(state)
+		CFG.SlowFallingActive = state
+	end)
+
+	createCFGToggle("Shiftlock:", CFG.Shiftlock, 505, function(state) setShiftlockState(state) end)
+	createCFGToggle("God Mode:", CFG.GodModeActive, 540, function(state) setGodModeState(state) end)
 
 	local colorTrailFrame = Instance.new("Frame")
 	colorTrailFrame.Name = "ColorTrailFrame"
@@ -476,7 +528,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 
 	local colorTrailMenuBtn = Instance.new("TextButton")
 	colorTrailMenuBtn.Size = UDim2.new(0, 260, 0, 32)
-	colorTrailMenuBtn.Position = UDim2.new(0, 10, 0, 520)
+	colorTrailMenuBtn.Position = UDim2.new(0, 10, 0, 585)
 	colorTrailMenuBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
 	colorTrailMenuBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	colorTrailMenuBtn.Text = "Color Trail Settings"
@@ -597,7 +649,6 @@ local function setupCustomAnimations(character)
 		if flyBodyVel then flyBodyVel:Destroy(); flyBodyVel = nil end
 		if flyBodyGyro then flyBodyGyro:Destroy(); flyBodyGyro = nil end
 		
-		-- Safely reset physics state to avoid fall damage upon landing
 		if rootPart then
 			rootPart.AssemblyLinearVelocity = Vector3.zero
 			rootPart.AssemblyAngularVelocity = Vector3.zero
@@ -615,7 +666,6 @@ local function setupCustomAnimations(character)
 		if isFlying then return end
 		isFlying = true
 		
-		-- Disable falling state calculation to bypass NDS fall damage
 		humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
 		humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
 		humanoid.PlatformStand = true
@@ -633,7 +683,6 @@ local function setupCustomAnimations(character)
 
 		local camera = Workspace.CurrentCamera
 
-		-- NDS Bypass: Continuous Velocity Zeroing Loop
 		velocityBypassConn = RunService.Heartbeat:Connect(function()
 			if isFlying and rootPart then
 				rootPart.AssemblyLinearVelocity = Vector3.zero
@@ -675,7 +724,6 @@ local function setupCustomAnimations(character)
 				return
 			end
 
-			-- NDS Altitude Ceiling Cap: Keep height below 350 Y to avoid disaster kill-layers
 			if rootPart.Position.Y > 350 then
 				rootPart.CFrame = CFrame.new(rootPart.Position.X, 345, rootPart.Position.Z)
 			end
@@ -1019,6 +1067,7 @@ local function setupCustomAnimations(character)
 		if CFG.AutoSprintOnExec then toggleSprint(true) end
 		if CFG.AutoNoclipOnExec then setNoclipState(true) end
 		if CFG.Shiftlock then setShiftlockState(true) end
+		if CFG.GodModeActive then setGodModeState(true) end
 	end)
 
 	local function isHeadInWater()
@@ -1059,6 +1108,19 @@ local function setupCustomAnimations(character)
 		if isFlying then return end
 
 		local state = humanoid:GetState()
+
+		-- Built-in Anti Fall Damage handler to prevent damage on high velocity landings in games like NDS
+		if (state == Enum.HumanoidStateType.Landed or isGrounded()) and rootPart.AssemblyLinearVelocity.Y < -30 then
+			local curVel = rootPart.AssemblyLinearVelocity
+			rootPart.AssemblyLinearVelocity = Vector3.new(curVel.X, 0, curVel.Z)
+		end
+
+		if CFG.SlowFallingActive and not isGliding and (state == Enum.HumanoidStateType.Freefall or rootPart.AssemblyLinearVelocity.Y < -1) and not isGrounded() then
+			local curVel = rootPart.AssemblyLinearVelocity
+			if curVel.Y < CFG.SlowFallingFallSpeed then
+				rootPart.AssemblyLinearVelocity = Vector3.new(curVel.X, CFG.SlowFallingFallSpeed, curVel.Z)
+			end
+		end
 
 		if isSprinting and isWalkOnWaterActive then
 			local rayParams = RaycastParams.new()
