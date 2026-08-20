@@ -77,7 +77,6 @@ local function setShiftlockState(state)
 	saveCFG()
 	
 	if state then
-		-- Actively capture any new UI/ScreenGuis added to PlayerGui or CoreGui while INF-HH loads
 		local connections = {}
 		
 		local function trackContainer(container)
@@ -91,19 +90,16 @@ local function setShiftlockState(state)
 		trackContainer(playerGui)
 		pcall(function() trackContainer(CoreGui) end)
 
-		-- Execute the INF-HH script
 		pcall(function()
 			loadstring(game:HttpGet("https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script"))()
 		end)
 
-		-- Stop tracking after 2 seconds to lock in its items
 		task.delay(2.0, function()
 			for _, conn in ipairs(connections) do
 				pcall(function() conn:Disconnect() end)
 			end
 		end)
 	else
-		-- 1. Destroy all dynamically tracked items spawned by INF-HH
 		for _, item in ipairs(trackedINFHHItems) do
 			if item and item.Parent then
 				pcall(function() item:Destroy() end)
@@ -111,7 +107,6 @@ local function setShiftlockState(state)
 		end
 		trackedINFHHItems = {}
 
-		-- 2. Deep clean PlayerGui for anything related to shiftlock/INF-HH (protecting TouchGui & MobileControlGui)
 		pcall(function()
 			for _, gui in ipairs(playerGui:GetChildren()) do
 				if gui.Name ~= "MobileControlGui" and gui.Name ~= "TouchGui" then
@@ -123,7 +118,6 @@ local function setShiftlockState(state)
 			end
 		end)
 
-		-- 3. Deep clean CoreGui for INF-HH elements if accessible
 		pcall(function()
 			for _, gui in ipairs(CoreGui:GetChildren()) do
 				local nameLower = string.lower(gui.Name)
@@ -402,7 +396,7 @@ local function setupCustomAnimations(character)
 	local glideStartTime = 0
 	local calculatedGlideDuration = CFG.BaseGlideDuration
 	local linearVelocity, glideAttachment = nil, nil
-	local noclipConn, renderConn, antiFlingConn = nil, nil, nil
+	local noclipConn, renderConn, antiFlingConn, speedLockConn = nil, nil, nil, nil
 	local currentMovementTrack = nil
 
 	local att0 = Instance.new("Attachment")
@@ -544,7 +538,17 @@ local function setupCustomAnimations(character)
 		wallRunBtn.Visible = isSprinting
 		glideBtn.Visible = isSprinting
 
+		-- Continuous safeguard against external triggers changing walk speed while sprinting
+		if speedLockConn then speedLockConn:Disconnect(); speedLockConn = nil end
 		if isSprinting then
+			speedLockConn = RunService.Heartbeat:Connect(function()
+				if isSprinting and humanoid and humanoid.Parent then
+					if humanoid.WalkSpeed ~= CFG.SprintSpeed then
+						humanoid.WalkSpeed = CFG.SprintSpeed
+					end
+				end
+			end)
+
 			sprintBtn.Text = "Sprint: ON"
 			sprintBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
 			if CFG.AutoGlideOnSprint then isGlideActive = true; glideBtn.Text = "Glide: ON"; glideBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50) end
@@ -704,6 +708,7 @@ local function setupCustomAnimations(character)
 	playMovementTrack(idleTrack)
 
 	humanoid.Died:Connect(function()
+		if speedLockConn then speedLockConn:Disconnect() end
 		stopGliding()
 		setAntiFlingState(false)
 		setNoclipState(false)
