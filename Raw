@@ -39,7 +39,8 @@ local CFG = {
 	SlowFallingFallSpeed = -4,
 	GodModeActive = false,
 	Shiftlock = false,
-	TouchFlingGui = false
+	TouchFlingGui = false,
+	LockAllButtons = false
 }
 
 local loadedGodModeObjects = {}
@@ -80,7 +81,8 @@ local ANIMATIONS = {
 	Swim = "rbxassetid://913384386",
 	SwimIdle = "rbxassetid://913389285",
 	Fly = "rbxassetid://120303626369803",
-	FlyIdle = "rbxassetid://100678061110922"
+	FlyIdle = "rbxassetid://100678061110922",
+	Sit = "rbxassetid://2506281703"
 }
 
 local function setTouchFlingGuiState(state)
@@ -95,7 +97,7 @@ local function setTouchFlingGuiState(state)
 			end
 
 			pcall(function()
-				loadstring(game:HttpGet("https://pastebin.com/raw/jy7LwJrh"))()
+				loadstring(game:HttpGet("[https://pastebin.com/raw/jy7LwJrh](https://pastebin.com/raw/jy7LwJrh)"))()
 			end)
 
 			task.spawn(function()
@@ -147,7 +149,7 @@ local function setShiftlockState(state)
 		
 		if not (activeInPlayerGui or activeInCoreGui) then
 			pcall(function()
-				loadstring(game:HttpGet("https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script"))()
+				loadstring(game:HttpGet("[https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script](https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script)"))()
 			end)
 			
 			task.spawn(function()
@@ -178,11 +180,12 @@ local function setShiftlockState(state)
 	end
 end
 
-local function makeSingleFingerDraggable(guiObject)
+local function makeSingleFingerDraggable(guiObject, isMainButton)
 	local dragging = false
 	local dragInput, dragStart, startPos
 
 	guiObject.InputBegan:Connect(function(input)
+		if isMainButton and CFG.LockAllButtons then return end
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			dragging = true
 			dragStart = input.Position
@@ -197,12 +200,14 @@ local function makeSingleFingerDraggable(guiObject)
 	end)
 
 	guiObject.InputChanged:Connect(function(input)
+		if isMainButton and CFG.LockAllButtons then return end
 		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
 			dragInput = input
 		end
 	end)
 
 	UserInputService.InputChanged:Connect(function(input)
+		if isMainButton and CFG.LockAllButtons then return end
 		if input == dragInput and dragging then
 			local delta = input.Position - dragStart
 			guiObject.Position = UDim2.new(
@@ -231,7 +236,7 @@ local function setGodModeState(state)
 		pcall(function() trackGodGui(CoreGui) end)
 
 		pcall(function()
-			loadstring(game:HttpGet("https://raw.githubusercontent.com/Adamlollxoolest/Adam-made-this-god-mode-script-lolololol/refs/heads/main/God%20mode%20script%20made%20by%20admmmo6"))()
+			loadstring(game:HttpGet("[https://raw.githubusercontent.com/Adamlollxoolest/Adam-made-this-god-mode-script-lolololol/refs/heads/main/God%20mode%20script%20made%20by%20admmmo6](https://raw.githubusercontent.com/Adamlollxoolest/Adam-made-this-god-mode-script-lolololol/refs/heads/main/God%20mode%20script%20made%20by%20admmmo6)"))()
 		end)
 	else
 		for _, gui in ipairs(loadedGodModeObjects) do
@@ -282,7 +287,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 		uiCorner.CornerRadius = UDim.new(0, 10)
 		uiCorner.Parent = button
 
-		makeSingleFingerDraggable(button)
+		makeSingleFingerDraggable(button, true)
 		return button
 	end
 
@@ -296,7 +301,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 	
 	local cfgFrame = Instance.new("Frame")
 	cfgFrame.Name = "CFGFrame"
-	cfgFrame.Size = UDim2.new(0, 280, 0, 630)
+	cfgFrame.Size = UDim2.new(0, 280, 0, 675)
 	cfgFrame.Position = UDim2.new(0, 160, 0, 20)
 	cfgFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 	cfgFrame.Visible = false
@@ -307,7 +312,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 	frameCorner.CornerRadius = UDim.new(0, 10)
 	frameCorner.Parent = cfgFrame
 
-	makeSingleFingerDraggable(cfgFrame)
+	makeSingleFingerDraggable(cfgFrame, false)
 
 	local function createCFGInput(labelText, defaultVal, posY, callback)
 		local label = Instance.new("TextLabel")
@@ -439,6 +444,16 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 	createCFGToggle("God Mode:", CFG.GodModeActive, 505, function(state) setGodModeState(state) end)
 	createCFGToggle("Touch Fling GUI:", CFG.TouchFlingGui, 540, function(state) setTouchFlingGuiState(state) end)
 
+	local mainButtons = {sprintBtn, antiFlingBtn, noclipBtn, flyBtn, wallRunBtn, glideBtn, cfgBtn}
+	createCFGToggle("Lock All Buttons:", CFG.LockAllButtons, 575, function(state)
+		CFG.LockAllButtons = state
+		for _, btn in ipairs(mainButtons) do
+			btn.Active = not state
+			btn.AutoButtonColor = not state
+		end
+		saveCFG()
+	end)
+
 	local colorTrailFrame = Instance.new("Frame")
 	colorTrailFrame.Name = "ColorTrailFrame"
 	colorTrailFrame.Size = UDim2.new(0, 260, 0, 275)
@@ -452,7 +467,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 	ctCorner.CornerRadius = UDim.new(0, 10)
 	ctCorner.Parent = colorTrailFrame
 
-	makeSingleFingerDraggable(colorTrailFrame)
+	makeSingleFingerDraggable(colorTrailFrame, false)
 
 	local ctTitle = Instance.new("TextLabel")
 	ctTitle.Size = UDim2.new(1, 0, 0, 30)
@@ -554,7 +569,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 
 	local colorTrailMenuBtn = Instance.new("TextButton")
 	colorTrailMenuBtn.Size = UDim2.new(0, 260, 0, 32)
-	colorTrailMenuBtn.Position = UDim2.new(0, 10, 0, 580)
+	colorTrailMenuBtn.Position = UDim2.new(0, 10, 0, 620)
 	colorTrailMenuBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
 	colorTrailMenuBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	colorTrailMenuBtn.Text = "Color Trail Settings"
@@ -572,6 +587,13 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 
 	wallRunBtn.Visible = false
 	glideBtn.Visible = false
+
+	if CFG.LockAllButtons then
+		for _, btn in ipairs(mainButtons) do
+			btn.Active = false
+			btn.AutoButtonColor = false
+		end
+	end
 
 	return sprintBtn, antiFlingBtn, noclipBtn, flyBtn, wallRunBtn, glideBtn
 end
@@ -621,13 +643,14 @@ local function setupCustomAnimations(character)
 	local swimIdleTrack = loadAnimation(ANIMATIONS.SwimIdle, Enum.AnimationPriority.Action, true)
 	local flyTrack = loadAnimation(ANIMATIONS.Fly, Enum.AnimationPriority.Action4, true)
 	local flyIdleTrack = loadAnimation(ANIMATIONS.FlyIdle, Enum.AnimationPriority.Action4, true)
+	local sitTrack = loadAnimation(ANIMATIONS.Sit, Enum.AnimationPriority.Action4, true)
 
 	local allAnimationTracks = {
 		idleTrack, walkTrack, runTrack,
 		normalJumpTrack, sprintJumpTrack,
 		normalFallTrack, sprintFallTrack,
 		normalClimbTrack, sprintClimbTrack,
-		swimTrack, swimIdleTrack, flyTrack, flyIdleTrack
+		swimTrack, swimIdleTrack, flyTrack, flyIdleTrack, sitTrack
 	}
 
 	local isFalling, isJumping, isSprinting = false, false, false
@@ -1171,6 +1194,10 @@ local function setupCustomAnimations(character)
 
 		local state = humanoid:GetState()
 
+		if state == Enum.HumanoidStateType.GettingUp or state == Enum.HumanoidStateType.Seated then
+			return
+		end
+
 		if (state == Enum.HumanoidStateType.Landed or isGrounded()) and rootPart.AssemblyLinearVelocity.Y < -30 then
 			local curVel = rootPart.AssemblyLinearVelocity
 			rootPart.AssemblyLinearVelocity = Vector3.new(curVel.X, 0, curVel.Z)
@@ -1350,7 +1377,7 @@ local function setupCustomAnimations(character)
 			isFalling = false
 		end
 
-		if (state ~= Enum.HumanoidStateType.Freefall and state ~= Enum.HumanoidStateType.Jumping and state ~= Enum.HumanoidStateType.Swimming and state ~= Enum.HumanoidStateType.Climbing and not isWallRunning and not isJumping and not isFalling) or isWalkingOnWater then
+		if (state ~= Enum.HumanoidStateType.Freefall and state ~= Enum.HumanoidStateType.Jumping and state ~= Enum.HumanoidStateType.Swimming and state ~= Enum.HumanoidStateType.Climbing and state ~= Enum.HumanoidStateType.Seated and not isWallRunning and not isJumping and not isFalling) or isWalkingOnWater then
 			if humanoid.MoveDirection.Magnitude > 0.1 then
 				playMovementTrack(isSprinting and runTrack or walkTrack, 0.1)
 			else
@@ -1380,7 +1407,13 @@ local function setupCustomAnimations(character)
 	humanoid.StateChanged:Connect(function(oldState, newState)
 		if isFlying then return end
 
-		if newState == Enum.HumanoidStateType.Climbing then
+		if newState == Enum.HumanoidStateType.Seated then
+			stopGliding()
+			isWalkingOnWater = false
+			if waterPlatform then waterPlatform.CanCollide = false end
+			stopAirAnimations()
+			playMovementTrack(sitTrack, 0.1)
+		elseif newState == Enum.HumanoidStateType.Climbing then
 			stopGliding()
 			isWalkingOnWater = false
 			if waterPlatform then waterPlatform.CanCollide = false end
