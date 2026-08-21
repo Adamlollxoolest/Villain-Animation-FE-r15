@@ -34,7 +34,7 @@ local CFG = {
 	AutoNoclipOnExec = false,
 	AutoGlideOnSprint = false,
 	AutoWallRunOnSprint = false,
-	AutoWalkOnWaterOnSprint = false,
+	AutoWalkOnWater = false,
 	SlowFallingActive = false,
 	SlowFallingFallSpeed = -4,
 	GodModeActive = false,
@@ -445,8 +445,8 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 	createCFGToggle("Glide (On Sprint):", CFG.AutoGlideOnSprint, 330, function(state) CFG.AutoGlideOnSprint = state end)
 	createCFGToggle("Wall Run (On Sprint):", CFG.AutoWallRunOnSprint, 365, function(state) CFG.AutoWallRunOnSprint = state end)
 	
-	createCFGToggle("Water Walk (On Sprint):", CFG.AutoWalkOnWaterOnSprint, 400, function(state) 
-		CFG.AutoWalkOnWaterOnSprint = state 
+	createCFGToggle("Water Walk", CFG.AutoWalkOnWater, 400, function(state) 
+		CFG.AutoWalkOnWater = state 
 		setWaterWalkToggleCallback(state)
 	end)
 
@@ -762,7 +762,7 @@ local function setupCustomAnimations(character)
 	local flyBodyVel, flyBodyGyro = nil, nil
 	local velocityBypassConn = nil
 
-	local isWalkOnWaterActive = CFG.AutoWalkOnWaterOnSprint
+	local isWalkOnWaterActive = CFG.AutoWalkOnWater
 	local isWalkingOnWater = false
 	local waterJumpCooldown = 0 
 	
@@ -917,7 +917,7 @@ local function setupCustomAnimations(character)
 	end
 
 	local function updateWaterPlatformExistence()
-		if isWalkOnWaterActive and isSprinting then
+		if isWalkOnWaterActive then
 			if not waterPlatform or not waterPlatform.Parent then
 				waterPlatform = Instance.new("Part")
 				waterPlatform.Name = "WaterPlatform"
@@ -935,6 +935,8 @@ local function setupCustomAnimations(character)
 			isWalkingOnWater = false
 		end
 	end
+
+	updateWaterPlatformExistence()
 
 	local att0 = Instance.new("Attachment")
 	att0.Position = Vector3.new(0, 0.7, 0.5)
@@ -1144,8 +1146,6 @@ local function setupCustomAnimations(character)
 			humanoid.Health = humanoid.MaxHealth
 		end
 
-		updateWaterPlatformExistence()
-
 		if speedLockConn then speedLockConn:Disconnect(); speedLockConn = nil end
 		if isSprinting then
 			speedLockConn = RunService.Heartbeat:Connect(function()
@@ -1167,7 +1167,6 @@ local function setupCustomAnimations(character)
 			stopGliding()
 			wallRunBtn.Text = "Wall Run: OFF"; wallRunBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
 			glideBtn.Text = "Glide: OFF"; glideBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
-			if waterPlatform then waterPlatform.CanCollide = false end
 		end
 	end
 
@@ -1309,7 +1308,7 @@ local function setupCustomAnimations(character)
 			end
 		end
 
-		if isSprinting and isWalkOnWaterActive then
+		if isWalkOnWaterActive then
 			local rayParams = RaycastParams.new()
 			local filterInstances = {character}
 			if waterPlatform then table.insert(filterInstances, waterPlatform) end
@@ -1354,7 +1353,7 @@ local function setupCustomAnimations(character)
 			if waterPlatform then waterPlatform.CanCollide = false end
 		end
 
-		if state == Enum.HumanoidStateType.Swimming and not (isSprinting and isWalkOnWaterActive) then
+		if state == Enum.HumanoidStateType.Swimming and not isWalkOnWaterActive then
 			isWalkingOnWater = false
 			if waterPlatform then waterPlatform.CanCollide = false end
 			isGliding = false
@@ -1519,7 +1518,7 @@ local function setupCustomAnimations(character)
 			stopAirAnimations()
 			playMovementTrack(isSprinting and sprintClimbTrack or normalClimbTrack, 0.1)
 		elseif newState == Enum.HumanoidStateType.Swimming then
-			if isSprinting and isWalkOnWaterActive and not isHeadInWater() then
+			if isWalkOnWaterActive and not isHeadInWater() then
 				humanoid:ChangeState(Enum.HumanoidStateType.Running)
 			else
 				isWalkingOnWater = false
