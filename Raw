@@ -44,7 +44,7 @@ local CFG = {
 }
 
 local loadedGodModeObjects = {}
-local loadedTouchFlingGui = nil
+local loadedTouchFlingGuisms = {}
 local shiftlockSliderCallbackRef = nil
 
 local function saveCFG()
@@ -89,115 +89,39 @@ local function setTouchFlingGuiState(state)
 	saveCFG()
 
 	if state then
-		if not loadedTouchFlingGui or not loadedTouchFlingGui.Parent then
-			local screenGui = Instance.new("ScreenGui")
-			screenGui.Name = "TouchFlingGuiInstance"
-			screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-			screenGui.ResetOnSpawn = false
-			screenGui.Parent = playerGui
+		if next(loadedTouchFlingGuisms) == nil then
+			-- Track ScreenGuis created right after loadstring execution
+			local existingGuis = {}
+			for _, gui in ipairs(playerGui:GetChildren()) do
+				if gui:IsA("ScreenGui") then existingGuis[gui] = true end
+			end
 
-			local frame = Instance.new("Frame")
-			frame.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
-			frame.BorderColor3 = Color3.fromRGB(0, 0, 0)
-			frame.BorderSizePixel = 0
-			frame.Position = UDim2.new(0.388539821, 0, 0.427821517, 0)
-			frame.Size = UDim2.new(0, 158, 0, 110)
-			frame.Parent = screenGui
+			pcall(function()
+				loadstring(game:HttpGet("https://pastefy.app/wT6d1xRK/raw"))()
+			end)
 
-			local frame2 = Instance.new("Frame")
-			frame2.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-			frame2.BorderColor3 = Color3.fromRGB(0, 0, 0)
-			frame2.BorderSizePixel = 0
-			frame2.Size = UDim2.new(0, 158, 0, 25)
-			frame2.Parent = frame
-
-			local textLabel = Instance.new("TextLabel")
-			textLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-			textLabel.BackgroundTransparency = 1.000
-			textLabel.BorderColor3 = Color3.fromRGB(0, 0, 0)
-			textLabel.BorderSizePixel = 0
-			textLabel.Position = UDim2.new(0.112792775, 0, -0.0151660154, 0)
-			textLabel.Size = UDim2.new(0, 121, 0, 26)
-			textLabel.Font = Enum.Font.Sarpanch
-			textLabel.Text = "Fling GUI"
-			textLabel.TextColor3 = Color3.fromRGB(0, 0, 255)
-			textLabel.TextSize = 25.000
-			textLabel.Parent = frame2
-
-			local textButton = Instance.new("TextButton")
-			textButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-			textButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
-			textButton.BorderSizePixel = 0
-			textButton.Position = UDim2.new(0.113924049, 0, 0.418181807, 0)
-			textButton.Size = UDim2.new(0, 121, 0, 37)
-			textButton.Font = Enum.Font.SourceSansItalic
-			textButton.Text = "OFF"
-			textButton.TextColor3 = Color3.fromRGB(0, 0, 0)
-			textButton.TextSize = 20.000
-			textButton.Parent = frame
-
-			local function iimawhFakeScript()
-				local hiddenfling = false
-				local flingThread 
-				if not ReplicatedStorage:FindFirstChild("juisdfj0i32i0eidsuf0iok") then
-					local detection = Instance.new("Decal")
-					detection.Name = "juisdfj0i32i0eidsuf0iok"
-					detection.Parent = ReplicatedStorage
-				end
-			 
-				local function fling()
-					local lp = Players.LocalPlayer
-					local c, hrp, vel, movel = nil, nil, nil, 0.1
-			 
-					while hiddenfling do
-						RunService.Heartbeat:Wait()
-						c = lp.Character
-						hrp = c and c:FindFirstChild("HumanoidRootPart")
-			 
-						if hrp then
-							vel = hrp.Velocity
-							hrp.Velocity = vel * 10000 + Vector3.new(0, 10000, 0)
-							RunService.RenderStepped:Wait()
-							hrp.Velocity = vel
-							RunService.Stepped:Wait()
-							hrp.Velocity = vel + Vector3.new(0, movel, 0)
-							movel = -movel
-						end
+			task.spawn(function()
+				task.wait(0.2)
+				for _, gui in ipairs(playerGui:GetChildren()) do
+					if gui:IsA("ScreenGui") and not existingGuis[gui] and gui.Name ~= "MobileControlGui" then
+						loadedTouchFlingGuisms[gui] = true
+						gui.Enabled = true
 					end
 				end
-			 
-				textButton.MouseButton1Click:Connect(function()
-					hiddenfling = not hiddenfling
-					textButton.Text = hiddenfling and "ON" or "OFF"
-			 
-					if hiddenfling then
-						flingThread = coroutine.create(fling)
-						coroutine.resume(flingThread)
-					else
-						hiddenfling = false
-					end
-				end)
-			end
-			coroutine.wrap(iimawhFakeScript)()
-
-			local function qcjqjlFakeScript()
-				frame.Active = true
-				frame.Draggable = true
-			end
-			coroutine.wrap(qcjqjlFakeScript)()
-
-			loadedTouchFlingGui = screenGui
+			end)
 		else
-			loadedTouchFlingGui.Enabled = true
+			for gui, _ in pairs(loadedTouchFlingGuisms) do
+				if gui and gui.Parent then
+					gui.Enabled = true
+				end
+			end
 		end
 	else
-		if loadedTouchFlingGui then
-			loadedTouchFlingGui.Enabled = false
+		for gui, _ in pairs(loadedTouchFlingGuisms) do
+			if gui and gui.Parent then
+				gui.Enabled = false
+			end
 		end
-		pcall(function()
-			local decal = ReplicatedStorage:FindFirstChild("juisdfj0i32i0eidsuf0iok")
-			if decal then decal:Destroy() end
-		end)
 	end
 end
 
