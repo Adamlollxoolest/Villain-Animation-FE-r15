@@ -95,7 +95,7 @@ local function setTouchFlingGuiState(state)
 			end
 
 			pcall(function()
-				loadstring(game:HttpGet("https://pastefy.app/wT6d1xRK/raw?nocache=" .. tick()))()
+				loadstring(game:HttpGet("https://pastebin.com/raw/jy7LwJrh"))()
 			end)
 
 			task.spawn(function()
@@ -648,7 +648,6 @@ local function setupCustomAnimations(character)
 
 	local waterPlatform = nil
 
-	-- Bulletproof Shield Method: Hooks directly into internal health modification & blocks zero drops
 	local originalHealth = humanoid.Health
 	healthGuardConn = RunService.Heartbeat:Connect(function()
 		if humanoid and humanoid.Parent then
