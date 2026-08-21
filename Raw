@@ -39,12 +39,13 @@ local CFG = {
 	SlowFallingActive = false,
 	SlowFallingFallSpeed = -4,
 	GodModeActive = false,
-	Shiftlock = false
+	Shiftlock = false,
+	TouchFlingGui = false
 }
 
-local isNoclipActive = false
-local trackedINFHHItems = {}
 local loadedGodModeObjects = {}
+local loadedTouchFlingGui = nil
+local shiftlockSliderCallbackRef = nil
 
 local function saveCFG()
 	if writefile then
@@ -83,69 +84,175 @@ local ANIMATIONS = {
 	FlyIdle = "rbxassetid://100678061110922"
 }
 
+local function setTouchFlingGuiState(state)
+	CFG.TouchFlingGui = state
+	saveCFG()
+
+	if state then
+		if not loadedTouchFlingGui or not loadedTouchFlingGui.Parent then
+			local screenGui = Instance.new("ScreenGui")
+			screenGui.Name = "TouchFlingGuiInstance"
+			screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+			screenGui.ResetOnSpawn = false
+			screenGui.Parent = playerGui
+
+			local frame = Instance.new("Frame")
+			frame.BackgroundColor3 = Color3.fromRGB(34, 34, 34)
+			frame.BorderColor3 = Color3.fromRGB(0, 0, 0)
+			frame.BorderSizePixel = 0
+			frame.Position = UDim2.new(0.388539821, 0, 0.427821517, 0)
+			frame.Size = UDim2.new(0, 158, 0, 110)
+			frame.Parent = screenGui
+
+			local frame2 = Instance.new("Frame")
+			frame2.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+			frame2.BorderColor3 = Color3.fromRGB(0, 0, 0)
+			frame2.BorderSizePixel = 0
+			frame2.Size = UDim2.new(0, 158, 0, 25)
+			frame2.Parent = frame
+
+			local textLabel = Instance.new("TextLabel")
+			textLabel.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			textLabel.BackgroundTransparency = 1.000
+			textLabel.BorderColor3 = Color3.fromRGB(0, 0, 0)
+			textLabel.BorderSizePixel = 0
+			textLabel.Position = UDim2.new(0.112792775, 0, -0.0151660154, 0)
+			textLabel.Size = UDim2.new(0, 121, 0, 26)
+			textLabel.Font = Enum.Font.Sarpanch
+			textLabel.Text = "Fling GUI"
+			textLabel.TextColor3 = Color3.fromRGB(0, 0, 255)
+			textLabel.TextSize = 25.000
+			textLabel.Parent = frame2
+
+			local textButton = Instance.new("TextButton")
+			textButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+			textButton.BorderColor3 = Color3.fromRGB(0, 0, 0)
+			textButton.BorderSizePixel = 0
+			textButton.Position = UDim2.new(0.113924049, 0, 0.418181807, 0)
+			textButton.Size = UDim2.new(0, 121, 0, 37)
+			textButton.Font = Enum.Font.SourceSansItalic
+			textButton.Text = "OFF"
+			textButton.TextColor3 = Color3.fromRGB(0, 0, 0)
+			textButton.TextSize = 20.000
+			textButton.Parent = frame
+
+			local function iimawhFakeScript()
+				local hiddenfling = false
+				local flingThread 
+				if not ReplicatedStorage:FindFirstChild("juisdfj0i32i0eidsuf0iok") then
+					local detection = Instance.new("Decal")
+					detection.Name = "juisdfj0i32i0eidsuf0iok"
+					detection.Parent = ReplicatedStorage
+				end
+			 
+				local function fling()
+					local lp = Players.LocalPlayer
+					local c, hrp, vel, movel = nil, nil, nil, 0.1
+			 
+					while hiddenfling do
+						RunService.Heartbeat:Wait()
+						c = lp.Character
+						hrp = c and c:FindFirstChild("HumanoidRootPart")
+			 
+						if hrp then
+							vel = hrp.Velocity
+							hrp.Velocity = vel * 10000 + Vector3.new(0, 10000, 0)
+							RunService.RenderStepped:Wait()
+							hrp.Velocity = vel
+							RunService.Stepped:Wait()
+							hrp.Velocity = vel + Vector3.new(0, movel, 0)
+							movel = -movel
+						end
+					end
+				end
+			 
+				textButton.MouseButton1Click:Connect(function()
+					hiddenfling = not hiddenfling
+					textButton.Text = hiddenfling and "ON" or "OFF"
+			 
+					if hiddenfling then
+						flingThread = coroutine.create(fling)
+						coroutine.resume(flingThread)
+					else
+						hiddenfling = false
+					end
+				end)
+			end
+			coroutine.wrap(iimawhFakeScript)()
+
+			local function qcjqjlFakeScript()
+				frame.Active = true
+				frame.Draggable = true
+			end
+			coroutine.wrap(qcjqjlFakeScript)()
+
+			loadedTouchFlingGui = screenGui
+		else
+			loadedTouchFlingGui.Enabled = true
+		end
+	else
+		if loadedTouchFlingGui then
+			loadedTouchFlingGui.Enabled = false
+		end
+		pcall(function()
+			local decal = ReplicatedStorage:FindFirstChild("juisdfj0i32i0eidsuf0iok")
+			if decal then decal:Destroy() end
+		end)
+	end
+end
+
 local function setShiftlockState(state)
 	CFG.Shiftlock = state
 	saveCFG()
 	
-	if state then
-		local connections = {}
-		local function trackContainer(container)
-			table.insert(connections, container.DescendantAdded:Connect(function(descendant)
-				if descendant ~= playerGui and descendant.Name ~= "TouchGui" and descendant.Name ~= "MobileControlGui" then
-					table.insert(trackedINFHHItems, descendant)
+	local function scanAndApply(parent)
+		local found = false
+		for _, obj in ipairs(parent:GetChildren()) do
+			local nameLower = string.lower(obj.Name)
+			if string.find(nameLower, "shift") or string.find(nameLower, "lock") or string.find(nameLower, "inf") then
+				if obj:IsA("ScreenGui") then
+					obj.Enabled = state
+					found = true
 				end
-			end))
-		end
-
-		trackContainer(playerGui)
-		pcall(function() trackContainer(CoreGui) end)
-
-		pcall(function()
-			loadstring(game:HttpGet("https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script"))()
-		end)
-
-		task.delay(2.0, function()
-			for _, conn in ipairs(connections) do
-				pcall(function() conn:Disconnect() end)
 			end
-		end)
+		end
+		return found
+	end
+
+	if state then
+		local activeInPlayerGui = scanAndApply(playerGui)
+		local activeInCoreGui = scanAndApply(CoreGui)
+		
+		if not (activeInPlayerGui or activeInCoreGui) then
+			pcall(function()
+				loadstring(game:HttpGet("https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script"))()
+			end)
+			
+			task.spawn(function()
+				local attempts = 0
+				while attempts < 10 do
+					task.wait(0.2)
+					if scanAndApply(playerGui) or scanAndApply(CoreGui) then
+						break
+					end
+					attempts = attempts + 1
+				end
+			end)
+		end
 	else
 		pcall(function()
-			player.DevEnableMouseLock = false
-			player.CameraMode = Enum.CameraMode.Classic
 			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-			UserInputService.MouseIconEnabled = true
+			if player.Character then
+				local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+				if humanoid then
+					humanoid.CameraOffset = Vector3.zero
+					humanoid.AutoRotate = true
+				end
+			end
 			
-			local playerScripts = player:FindFirstChild("PlayerScripts")
-			if playerScripts then
-				local playerModule = playerScripts:FindFirstChild("PlayerModule")
-				if playerModule then
-					playerModule.Disabled = true
-					task.wait(0.1)
-					playerModule.Disabled = false
-				end
-			end
+			scanAndApply(playerGui)
+			scanAndApply(CoreGui)
 		end)
-
-		for _, item in ipairs(trackedINFHHItems) do
-			if item and item.Parent then
-				pcall(function() item:Destroy() end)
-			end
-		end
-		trackedINFHHItems = {}
-
-		local function deepClean(parent)
-			for _, child in ipairs(parent:GetChildren()) do
-				local nameLower = string.lower(child.Name)
-				if (string.find(nameLower, "shiftlock") or string.find(nameLower, "mouselock") or string.find(nameLower, "cursor")) and nameLower ~= "touchgui" and nameLower ~= "mobilecontrolgui" then
-					pcall(function() child:Destroy() end)
-				else
-					deepClean(child)
-				end
-			end
-		end
-		pcall(function() deepClean(playerGui) end)
-		pcall(function() deepClean(CoreGui) end)
 	end
 end
 
@@ -266,7 +373,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 	
 	local cfgFrame = Instance.new("Frame")
 	cfgFrame.Name = "CFGFrame"
-	cfgFrame.Size = UDim2.new(0, 280, 0, 630)
+	cfgFrame.Size = UDim2.new(0, 280, 0, 675)
 	cfgFrame.Position = UDim2.new(0, 160, 0, 20)
 	cfgFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 	cfgFrame.Visible = false
@@ -410,8 +517,9 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 		CFG.SlowFallingActive = state
 	end)
 
-	createCFGToggle("Shiftlock:", CFG.Shiftlock, 505, function(state) setShiftlockState(state) end)
+	shiftlockSliderCallbackRef = createCFGToggle("Shiftlock:", CFG.Shiftlock, 505, function(state) setShiftlockState(state) end)
 	createCFGToggle("God Mode:", CFG.GodModeActive, 540, function(state) setGodModeState(state) end)
+	createCFGToggle("Touch Fling GUI:", CFG.TouchFlingGui, 575, function(state) setTouchFlingGuiState(state) end)
 
 	local colorTrailFrame = Instance.new("Frame")
 	colorTrailFrame.Name = "ColorTrailFrame"
@@ -528,7 +636,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 
 	local colorTrailMenuBtn = Instance.new("TextButton")
 	colorTrailMenuBtn.Size = UDim2.new(0, 260, 0, 32)
-	colorTrailMenuBtn.Position = UDim2.new(0, 10, 0, 585)
+	colorTrailMenuBtn.Position = UDim2.new(0, 10, 0, 625)
 	colorTrailMenuBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
 	colorTrailMenuBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	colorTrailMenuBtn.Text = "Color Trail Settings"
@@ -617,10 +725,21 @@ local function setupCustomAnimations(character)
 	local glideStartTime = 0
 	local calculatedGlideDuration = CFG.BaseGlideDuration
 	local linearVelocity, glideAttachment = nil, nil
-	local noclipConn, renderConn, antiFlingConn, speedLockConn, jumpReqConn, flyConn = nil, nil, nil, nil, nil, nil
+	local noclipConn, renderConn, antiFlingConn, speedLockConn, jumpReqConn, flyConn, healthGuardConn = nil, nil, nil, nil, nil, nil, nil
 	local currentMovementTrack = nil
 
 	local waterPlatform = nil
+
+	local lastHealth = humanoid.Health
+	healthGuardConn = humanoid.HealthChanged:Connect(function(newHealth)
+		if newHealth < lastHealth then
+			local damageAmount = lastHealth - newHealth
+			if rootPart.AssemblyLinearVelocity.Y > -50 and damageAmount > 0 then
+				humanoid.Health = lastHealth
+			end
+		end
+		lastHealth = humanoid.Health
+	end)
 
 	local function stopAllAnimationsExcept(targetTrack)
 		for _, track in ipairs(allAnimationTracks) do
@@ -1068,6 +1187,7 @@ local function setupCustomAnimations(character)
 		if CFG.AutoNoclipOnExec then setNoclipState(true) end
 		if CFG.Shiftlock then setShiftlockState(true) end
 		if CFG.GodModeActive then setGodModeState(true) end
+		if CFG.TouchFlingGui then setTouchFlingGuiState(true) end
 	end)
 
 	local function isHeadInWater()
@@ -1109,7 +1229,6 @@ local function setupCustomAnimations(character)
 
 		local state = humanoid:GetState()
 
-		-- Built-in Anti Fall Damage handler to prevent damage on high velocity landings in games like NDS
 		if (state == Enum.HumanoidStateType.Landed or isGrounded()) and rootPart.AssemblyLinearVelocity.Y < -30 then
 			local curVel = rootPart.AssemblyLinearVelocity
 			rootPart.AssemblyLinearVelocity = Vector3.new(curVel.X, 0, curVel.Z)
@@ -1370,6 +1489,7 @@ local function setupCustomAnimations(character)
 		stopFlying()
 		if speedLockConn then speedLockConn:Disconnect() end
 		if jumpReqConn then jumpReqConn:Disconnect() end
+		if healthGuardConn then healthGuardConn:Disconnect() end
 		if waterPlatform then waterPlatform:Destroy() end
 		stopGliding()
 		setAntiFlingState(false)
