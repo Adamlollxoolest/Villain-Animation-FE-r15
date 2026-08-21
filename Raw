@@ -97,7 +97,7 @@ local function setTouchFlingGuiState(state)
 			end
 
 			pcall(function()
-				loadstring(game:HttpGet("[https://pastebin.com/raw/jy7LwJrh](https://pastebin.com/raw/jy7LwJrh)"))()
+				loadstring(game:HttpGet("https://pastebin.com/raw/jy7LwJrh"))()
 			end)
 
 			task.spawn(function()
@@ -149,7 +149,7 @@ local function setShiftlockState(state)
 		
 		if not (activeInPlayerGui or activeInCoreGui) then
 			pcall(function()
-				loadstring(game:HttpGet("[https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script](https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script)"))()
+				loadstring(game:HttpGet("https://raw.githubusercontent.com/INF-HH/-/refs/heads/main/Script"))()
 			end)
 			
 			task.spawn(function()
@@ -236,7 +236,7 @@ local function setGodModeState(state)
 		pcall(function() trackGodGui(CoreGui) end)
 
 		pcall(function()
-			loadstring(game:HttpGet("[https://raw.githubusercontent.com/Adamlollxoolest/Adam-made-this-god-mode-script-lolololol/refs/heads/main/God%20mode%20script%20made%20by%20admmmo6](https://raw.githubusercontent.com/Adamlollxoolest/Adam-made-this-god-mode-script-lolololol/refs/heads/main/God%20mode%20script%20made%20by%20admmmo6)"))()
+			loadstring(game:HttpGet("https://raw.githubusercontent.com/Adamlollxoolest/Adam-made-this-god-mode-script-lolololol/refs/heads/main/God%20mode%20script%20made%20by%20admmmo6"))()
 		end)
 	else
 		for _, gui in ipairs(loadedGodModeObjects) do
@@ -790,10 +790,6 @@ local function setupCustomAnimations(character)
 			if not isFlying or not rootPart then
 				stopFlying()
 				return
-			end
-
-			if rootPart.Position.Y > 350 then
-				rootPart.CFrame = CFrame.new(rootPart.Position.X, 345, rootPart.Position.Z)
 			end
 
 			flyBodyGyro.CFrame = camera.CFrame
