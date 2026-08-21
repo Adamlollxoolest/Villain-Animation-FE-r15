@@ -4,7 +4,6 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 local CoreGui = game:GetService("CoreGui")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -90,18 +89,17 @@ local function setTouchFlingGuiState(state)
 
 	if state then
 		if next(loadedTouchFlingGuisms) == nil then
-			-- Track ScreenGuis created right after loadstring execution
 			local existingGuis = {}
 			for _, gui in ipairs(playerGui:GetChildren()) do
 				if gui:IsA("ScreenGui") then existingGuis[gui] = true end
 			end
 
 			pcall(function()
-				loadstring(game:HttpGet("https://pastefy.app/wT6d1xRK/raw"))()
+				loadstring(game:HttpGet("https://pastefy.app/wT6d1xRK/raw?nocache=" .. tick()))()
 			end)
 
 			task.spawn(function()
-				task.wait(0.2)
+				task.wait(0.3)
 				for _, gui in ipairs(playerGui:GetChildren()) do
 					if gui:IsA("ScreenGui") and not existingGuis[gui] and gui.Name ~= "MobileControlGui" then
 						loadedTouchFlingGuisms[gui] = true
@@ -290,14 +288,15 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 
 	local sprintBtn = makeButton("SprintButton", "Sprint: OFF", UDim2.new(0, 20, 0, 20), Color3.fromRGB(220, 50, 50))
 	local antiFlingBtn = makeButton("AntiFlingButton", "Anti Fling: OFF", UDim2.new(0, 20, 0, 70), Color3.fromRGB(220, 50, 50))
-	local flyBtn = makeButton("FlyButton", "Fly: OFF", UDim2.new(0, 20, 0, 120), Color3.fromRGB(220, 50, 50))
-	local wallRunBtn = makeButton("WallRunButton", "Wall Run: OFF", UDim2.new(0, 20, 0, 170), Color3.fromRGB(220, 50, 50))
-	local glideBtn = makeButton("GlideButton", "Glide: OFF", UDim2.new(0, 20, 0, 220), Color3.fromRGB(220, 50, 50))
-	local cfgBtn = makeButton("CFGButton", "CFG Menu", UDim2.new(0, 20, 0, 270), Color3.fromRGB(100, 100, 100))
+	local noclipBtn = makeButton("NoclipButton", "Noclip: OFF", UDim2.new(0, 20, 0, 120), Color3.fromRGB(220, 50, 50))
+	local flyBtn = makeButton("FlyButton", "Fly: OFF", UDim2.new(0, 20, 0, 170), Color3.fromRGB(220, 50, 50))
+	local wallRunBtn = makeButton("WallRunButton", "Wall Run: OFF", UDim2.new(0, 20, 0, 220), Color3.fromRGB(220, 50, 50))
+	local glideBtn = makeButton("GlideButton", "Glide: OFF", UDim2.new(0, 20, 0, 270), Color3.fromRGB(220, 50, 50))
+	local cfgBtn = makeButton("CFGButton", "CFG Menu", UDim2.new(0, 20, 0, 320), Color3.fromRGB(100, 100, 100))
 	
 	local cfgFrame = Instance.new("Frame")
 	cfgFrame.Name = "CFGFrame"
-	cfgFrame.Size = UDim2.new(0, 280, 0, 675)
+	cfgFrame.Size = UDim2.new(0, 280, 0, 630)
 	cfgFrame.Position = UDim2.new(0, 160, 0, 20)
 	cfgFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 	cfgFrame.Visible = false
@@ -422,28 +421,23 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 	createCFGInput("Water Offset:", CFG.WalkOnWaterHeightOffset, 185, function(val) CFG.WalkOnWaterHeightOffset = val end)
 	createCFGInput("Slow Fall Speed:", CFG.SlowFallingFallSpeed, 220, function(val) CFG.SlowFallingFallSpeed = val end)
 
-	local setNoclipUI = createCFGToggle("Noclip Toggle:", CFG.AutoNoclipOnExec, 260, function(state)
-		CFG.AutoNoclipOnExec = state
-		setNoclipStateCallback(state)
-	end)
-
-	createCFGToggle("Anti Fling (Exec On):", CFG.AutoAntiFlingOnExec, 295, function(state) CFG.AntiFlingOnExec = state end)
-	createCFGToggle("Sprint (Exec On):", CFG.AutoSprintOnExec, 330, function(state) CFG.AutoSprintOnExec = state end)
-	createCFGToggle("Glide (On Sprint):", CFG.AutoGlideOnSprint, 365, function(state) CFG.AutoGlideOnSprint = state end)
-	createCFGToggle("Wall Run (On Sprint):", CFG.AutoWallRunOnSprint, 400, function(state) CFG.AutoWallRunOnSprint = state end)
+	createCFGToggle("Anti Fling (Exec On):", CFG.AutoAntiFlingOnExec, 260, function(state) CFG.AntiFlingOnExec = state end)
+	createCFGToggle("Sprint (Exec On):", CFG.AutoSprintOnExec, 295, function(state) CFG.AutoSprintOnExec = state end)
+	createCFGToggle("Glide (On Sprint):", CFG.AutoGlideOnSprint, 330, function(state) CFG.AutoGlideOnSprint = state end)
+	createCFGToggle("Wall Run (On Sprint):", CFG.AutoWallRunOnSprint, 365, function(state) CFG.AutoWallRunOnSprint = state end)
 	
-	createCFGToggle("Water Walk (On Sprint):", CFG.AutoWalkOnWaterOnSprint, 435, function(state) 
+	createCFGToggle("Water Walk (On Sprint):", CFG.AutoWalkOnWaterOnSprint, 400, function(state) 
 		CFG.AutoWalkOnWaterOnSprint = state 
 		setWaterWalkToggleCallback(state)
 	end)
 
-	createCFGToggle("Slow Falling:", CFG.SlowFallingActive, 470, function(state)
+	createCFGToggle("Slow Falling:", CFG.SlowFallingActive, 435, function(state)
 		CFG.SlowFallingActive = state
 	end)
 
-	shiftlockSliderCallbackRef = createCFGToggle("Shiftlock:", CFG.Shiftlock, 505, function(state) setShiftlockState(state) end)
-	createCFGToggle("God Mode:", CFG.GodModeActive, 540, function(state) setGodModeState(state) end)
-	createCFGToggle("Touch Fling GUI:", CFG.TouchFlingGui, 575, function(state) setTouchFlingGuiState(state) end)
+	shiftlockSliderCallbackRef = createCFGToggle("Shiftlock:", CFG.Shiftlock, 470, function(state) setShiftlockState(state) end)
+	createCFGToggle("God Mode:", CFG.GodModeActive, 505, function(state) setGodModeState(state) end)
+	createCFGToggle("Touch Fling GUI:", CFG.TouchFlingGui, 540, function(state) setTouchFlingGuiState(state) end)
 
 	local colorTrailFrame = Instance.new("Frame")
 	colorTrailFrame.Name = "ColorTrailFrame"
@@ -560,7 +554,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 
 	local colorTrailMenuBtn = Instance.new("TextButton")
 	colorTrailMenuBtn.Size = UDim2.new(0, 260, 0, 32)
-	colorTrailMenuBtn.Position = UDim2.new(0, 10, 0, 625)
+	colorTrailMenuBtn.Position = UDim2.new(0, 10, 0, 580)
 	colorTrailMenuBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
 	colorTrailMenuBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	colorTrailMenuBtn.Text = "Color Trail Settings"
@@ -579,7 +573,7 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 	wallRunBtn.Visible = false
 	glideBtn.Visible = false
 
-	return sprintBtn, antiFlingBtn, flyBtn, wallRunBtn, glideBtn, setNoclipUI
+	return sprintBtn, antiFlingBtn, noclipBtn, flyBtn, wallRunBtn, glideBtn
 end
 
 local function setupCustomAnimations(character)
@@ -637,7 +631,7 @@ local function setupCustomAnimations(character)
 	}
 
 	local isFalling, isJumping, isSprinting = false, false, false
-	local isWallRunning, isWallRunActive, isGlideActive, isGliding, isAntiFlingActive = false, false, false, false, false
+	local isWallRunning, isWallRunActive, isGlideActive, isGliding, isAntiFlingActive, isNoclipActive = false, false, false, false, false, false
 	local isFlying = false
 	local flyBodyVel, flyBodyGyro = nil, nil
 	local velocityBypassConn = nil
@@ -654,15 +648,24 @@ local function setupCustomAnimations(character)
 
 	local waterPlatform = nil
 
-	local lastHealth = humanoid.Health
-	healthGuardConn = humanoid.HealthChanged:Connect(function(newHealth)
-		if newHealth < lastHealth then
-			local damageAmount = lastHealth - newHealth
-			if rootPart.AssemblyLinearVelocity.Y > -50 and damageAmount > 0 then
-				humanoid.Health = lastHealth
+	-- Bulletproof Shield Method: Hooks directly into internal health modification & blocks zero drops
+	local originalHealth = humanoid.Health
+	healthGuardConn = RunService.Heartbeat:Connect(function()
+		if humanoid and humanoid.Parent then
+			if isSprinting then
+				if humanoid.Health < humanoid.MaxHealth then
+					humanoid.Health = humanoid.MaxHealth
+				end
 			end
 		end
-		lastHealth = humanoid.Health
+	end)
+
+	local healthChangedConn = humanoid.HealthChanged:Connect(function(newHealth)
+		if isSprinting and newHealth < humanoid.MaxHealth then
+			pcall(function()
+				humanoid.Health = humanoid.MaxHealth
+			end)
+		end
 	end)
 
 	local function stopAllAnimationsExcept(targetTrack)
@@ -946,6 +949,8 @@ local function setupCustomAnimations(character)
 
 	local function setNoclipState(enable)
 		isNoclipActive = enable
+		CFG.AutoNoclipOnExec = enable
+		saveCFG()
 		if noclipConn then noclipConn:Disconnect(); noclipConn = nil end
 		if isNoclipActive then
 			noclipConn = RunService.Stepped:Connect(function()
@@ -970,7 +975,7 @@ local function setupCustomAnimations(character)
 		end
 	end
 
-	local sprintBtn, antiFlingBtn, flyBtn, wallRunBtn, glideBtn, updateNoclipUI = createMobileUI(
+	local sprintBtn, antiFlingBtn, noclipBtn, flyBtn, wallRunBtn, glideBtn = createMobileUI(
 		setNoclipState, 
 		updateTrailColor, 
 		function(state)
@@ -1001,11 +1006,22 @@ local function setupCustomAnimations(character)
 		end
 	end)
 
+	noclipBtn.MouseButton1Click:Connect(function()
+		local newState = not isNoclipActive
+		setNoclipState(newState)
+		noclipBtn.Text = newState and "Noclip: ON" or "Noclip: OFF"
+		noclipBtn.BackgroundColor3 = newState and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(220, 50, 50)
+	end)
+
 	local function toggleSprint(enable)
 		isSprinting = enable
 		humanoid.WalkSpeed = isSprinting and CFG.SprintSpeed or CFG.WalkSpeed
 		wallRunBtn.Visible = isSprinting
 		glideBtn.Visible = isSprinting
+
+		if isSprinting then
+			humanoid.Health = humanoid.MaxHealth
+		end
 
 		updateWaterPlatformExistence()
 
@@ -1067,9 +1083,8 @@ local function setupCustomAnimations(character)
 		if input.KeyCode == Enum.KeyCode.N then
 			local newState = not isNoclipActive
 			setNoclipState(newState)
-			CFG.AutoNoclipOnExec = newState
-			if updateNoclipUI then updateNoclipUI(newState) end
-			saveCFG()
+			noclipBtn.Text = newState and "Noclip: ON" or "Noclip: OFF"
+			noclipBtn.BackgroundColor3 = newState and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(220, 50, 50)
 		end
 	end)
 
@@ -1108,7 +1123,11 @@ local function setupCustomAnimations(character)
 			setAntiFlingState(true)
 		end
 		if CFG.AutoSprintOnExec then toggleSprint(true) end
-		if CFG.AutoNoclipOnExec then setNoclipState(true) end
+		if CFG.AutoNoclipOnExec then
+			setNoclipState(true)
+			noclipBtn.Text = "Noclip: ON"
+			noclipBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+		end
 		if CFG.Shiftlock then setShiftlockState(true) end
 		if CFG.GodModeActive then setGodModeState(true) end
 		if CFG.TouchFlingGui then setTouchFlingGuiState(true) end
@@ -1414,6 +1433,7 @@ local function setupCustomAnimations(character)
 		if speedLockConn then speedLockConn:Disconnect() end
 		if jumpReqConn then jumpReqConn:Disconnect() end
 		if healthGuardConn then healthGuardConn:Disconnect() end
+		if healthChangedConn then healthChangedConn:Disconnect() end
 		if waterPlatform then waterPlatform:Destroy() end
 		stopGliding()
 		setAntiFlingState(false)
