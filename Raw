@@ -40,7 +40,9 @@ local CFG = {
 	GodModeActive = false,
 	Shiftlock = false,
 	TouchFlingGui = false,
-	LockAllButtons = false
+	LockAllButtons = false,
+	
+	ButtonPositions = {}
 }
 
 local loadedGodModeObjects = {}
@@ -184,6 +186,13 @@ local function makeSingleFingerDraggable(guiObject, isMainButton)
 	local dragging = false
 	local dragInput, dragStart, startPos
 
+	if CFG.ButtonPositions and CFG.ButtonPositions[guiObject.Name] then
+		local p = CFG.ButtonPositions[guiObject.Name]
+		if type(p) == "table" and #p == 4 then
+			guiObject.Position = UDim2.new(p[1], p[2], p[3], p[4])
+		end
+	end
+
 	guiObject.InputBegan:Connect(function(input)
 		if isMainButton and CFG.LockAllButtons then return end
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -194,6 +203,11 @@ local function makeSingleFingerDraggable(guiObject, isMainButton)
 			input.Changed:Connect(function()
 				if input.UserInputState == Enum.UserInputState.End then
 					dragging = false
+					if guiObject and guiObject.Parent then
+						local pos = guiObject.Position
+						CFG.ButtonPositions[guiObject.Name] = {pos.X.Scale, pos.X.Offset, pos.Y.Scale, pos.Y.Offset}
+						saveCFG()
+					end
 				end
 			end)
 		end
@@ -454,6 +468,109 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 		saveCFG()
 	end)
 
+	-- Reset Buttons Position Section inside CFG Menu
+	local resetLabel = Instance.new("TextLabel")
+	resetLabel.Size = UDim2.new(0, 160, 0, 30)
+	resetLabel.Position = UDim2.new(0, 10, 0, 615)
+	resetLabel.BackgroundTransparency = 1
+	resetLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	resetLabel.Text = "Reset Buttons Position"
+	resetLabel.Font = Enum.Font.SourceSans
+	resetLabel.TextSize = 13
+	resetLabel.TextXAlignment = Enum.TextXAlignment.Left
+	resetLabel.Parent = cfgFrame
+
+	local resetBtn = Instance.new("TextButton")
+	resetBtn.Size = UDim2.new(0, 90, 0, 28)
+	resetBtn.Position = UDim2.new(0, 180, 0, 616)
+	resetBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+	resetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	resetBtn.Text = "Reset"
+	resetBtn.Font = Enum.Font.SourceSansBold
+	resetBtn.TextSize = 14
+	resetBtn.Parent = cfgFrame
+
+	local resetCorner = Instance.new("UICorner")
+	resetCorner.CornerRadius = UDim.new(0, 6)
+	resetCorner.Parent = resetBtn
+
+	-- Confirmation Popup Frame
+	local confirmFrame = Instance.new("Frame")
+	confirmFrame.Size = UDim2.new(0, 260, 0, 110)
+	confirmFrame.Position = UDim2.new(0.5, -130, 0.5, -55)
+	confirmFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	confirmFrame.Visible = false
+	confirmFrame.Active = true
+	confirmFrame.Parent = screenGui
+
+	local cfCorner = Instance.new("UICorner")
+	cfCorner.CornerRadius = UDim.new(0, 10)
+	cfCorner.Parent = confirmFrame
+
+	local confirmText = Instance.new("TextLabel")
+	confirmText.Size = UDim2.new(1, -20, 0, 55)
+	confirmText.Position = UDim2.new(0, 10, 0, 10)
+	confirmText.BackgroundTransparency = 1
+	confirmText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	confirmText.Text = "Are you sure you want to reset button position? If you pressed this on accident press No"
+	confirmText.Font = Enum.Font.SourceSans
+	confirmText.TextSize = 13
+	confirmText.TextWrapped = true
+	confirmText.TextXAlignment = Enum.TextXAlignment.Center
+	confirmText.Parent = confirmFrame
+
+	local yesBtn = Instance.new("TextButton")
+	yesBtn.Size = UDim2.new(0, 110, 0, 30)
+	yesBtn.Position = UDim2.new(0, 15, 0, 70)
+	yesBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+	yesBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	yesBtn.Text = "Yes"
+	yesBtn.Font = Enum.Font.SourceSansBold
+	yesBtn.TextSize = 14
+	yesBtn.Parent = confirmFrame
+
+	local yesCorner = Instance.new("UICorner")
+	yesCorner.CornerRadius = UDim.new(0, 6)
+	yesCorner.Parent = yesBtn
+
+	local noBtn = Instance.new("TextButton")
+	noBtn.Size = UDim2.new(0, 110, 0, 30)
+	noBtn.Position = UDim2.new(0, 135, 0, 70)
+	noBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+	noBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	noBtn.Text = "No"
+	noBtn.Font = Enum.Font.SourceSansBold
+	noBtn.TextSize = 14
+	noBtn.Parent = confirmFrame
+
+	local noCorner = Instance.new("UICorner")
+	noCorner.CornerRadius = UDim.new(0, 6)
+	noCorner.Parent = noBtn
+
+	resetBtn.MouseButton1Click:Connect(function()
+		confirmFrame.Visible = true
+	end)
+
+	noBtn.MouseButton1Click:Connect(function()
+		confirmFrame.Visible = false
+	end)
+
+	yesBtn.MouseButton1Click:Connect(function()
+		CFG.ButtonPositions = {}
+		saveCFG()
+		confirmFrame.Visible = false
+		
+		-- Reset button default positions immediately
+		sprintBtn.Position = UDim2.new(0, 20, 0, 20)
+		antiFlingBtn.Position = UDim2.new(0, 20, 0, 70)
+		noclipBtn.Position = UDim2.new(0, 20, 0, 120)
+		flyBtn.Position = UDim2.new(0, 20, 0, 170)
+		wallRunBtn.Position = UDim2.new(0, 20, 0, 220)
+		glideBtn.Position = UDim2.new(0, 20, 0, 270)
+		cfgBtn.Position = UDim2.new(0, 20, 0, 320)
+		cfgFrame.Position = UDim2.new(0, 160, 0, 20)
+	end)
+
 	local colorTrailFrame = Instance.new("Frame")
 	colorTrailFrame.Name = "ColorTrailFrame"
 	colorTrailFrame.Size = UDim2.new(0, 260, 0, 275)
@@ -565,20 +682,6 @@ local function createMobileUI(setNoclipStateCallback, updateTrailColorCallback, 
 			local col = Color3.fromHSV(relX, 1 - (relY * 0.5), 1 - relY)
 			applyColorValues(col.R * 255, col.G * 255, col.B * 255)
 		end
-	end)
-
-	local colorTrailMenuBtn = Instance.new("TextButton")
-	colorTrailMenuBtn.Size = UDim2.new(0, 260, 0, 32)
-	colorTrailMenuBtn.Position = UDim2.new(0, 10, 0, 620)
-	colorTrailMenuBtn.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
-	colorTrailMenuBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-	colorTrailMenuBtn.Text = "Color Trail Settings"
-	colorTrailMenuBtn.Font = Enum.Font.SourceSansBold
-	colorTrailMenuBtn.TextSize = 14
-	colorTrailMenuBtn.Parent = cfgFrame
-
-	colorTrailMenuBtn.MouseButton1Click:Connect(function()
-		colorTrailFrame.Visible = not colorTrailFrame.Visible
 	end)
 
 	cfgBtn.MouseButton1Click:Connect(function()
